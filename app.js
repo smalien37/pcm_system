@@ -328,11 +328,35 @@ function waitForNavKey() {
   document.addEventListener('keydown', handler, { once: true });
 }
 
+// // Auth Handlers
+// function handleLogin(e) {
+//   e.preventDefault();
+//   sessionStorage.setItem('loggedIn', 'true');
+//   showMainApp();
+// }
 // Auth Handlers
+// Auth Handlers
+const VALID_CREDENTIALS = [
+  { email: 'admin@synesisconsulting.app', password: 'Demo@2026' },
+  { email: 'admin@syncflow.local', password: 'password123' },
+  // Add more credentials here as needed
+];
+
 function handleLogin(e) {
   e.preventDefault();
-  sessionStorage.setItem('loggedIn', 'true');
-  showMainApp();
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+
+  const isValid = VALID_CREDENTIALS.some(
+    cred => cred.email === email && cred.password === password
+  );
+
+  if (isValid) {
+    sessionStorage.setItem('loggedIn', 'true');
+    showMainApp();
+  } else {
+    alert('Invalid email or password. Please try again.');
+  }
 }
 
 function handleLogout() {
