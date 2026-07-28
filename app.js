@@ -328,17 +328,10 @@ function waitForNavKey() {
   document.addEventListener('keydown', handler, { once: true });
 }
 
-// // Auth Handlers
-// function handleLogin(e) {
-//   e.preventDefault();
-//   sessionStorage.setItem('loggedIn', 'true');
-//   showMainApp();
-// }
-// Auth Handlers
 // Auth Handlers
 const VALID_CREDENTIALS = [
   { email: 'admin@synesisconsulting.app', password: 'Demo@2026' },
-  { email: 'admin@syncflow.local', password: 'password123' },
+  { email: 'demo@synesisconsulting.app', password: 'Demo@2026' },
   // Add more credentials here as needed
 ];
 
@@ -1278,9 +1271,10 @@ function filterPOs() {
 }
 
 function openPOModal() {
+  modalContent.classList.add('modal-wide');
   modalContent.innerHTML = `
     <div class="modal-header">
-      <h2>New Purchase Order</h2>
+      <h2>Create Purchase Order</h2>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
@@ -1289,50 +1283,71 @@ function openPOModal() {
           <div class="form-group">
             <label>Vendor *</label>
             <select id="po-vendor" required>
-              <option value="">Select vendor...</option>
+              <option value="">Vendor *</option>
               ${AppData.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
             <label>Site *</label>
             <select id="po-site" required>
-              <option value="">Select site...</option>
+              <option value="">Site *</option>
               ${AppData.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
             </select>
           </div>
-          <div class="form-group">
-            <label>PO Date</label>
-            <input type="date" id="po-date" value="${new Date().toISOString().split('T')[0]}">
-          </div>
         </div>
 
-        <div class="item-lines">
-          <div class="item-lines-header">
-            <h4>Order Lines</h4>
-            <button type="button" class="btn btn-sm btn-secondary" onclick="addPOLine()">+ Add Line</button>
+        <div class="form-group">
+          <label>Cost centre (optional)</label>
+          <select id="po-cost-centre">
+            <option value="">Cost centre (optional)</option>
+            <option value="PROJ-A">Project Alpha</option>
+            <option value="PROJ-B">Project Beta</option>
+            <option value="MAINT">Maintenance</option>
+            <option value="ADMIN">Administration</option>
+          </select>
+          <p style="font-size: 12px; color: var(--gray-500); margin-top: 4px;">Links this PO to a budget; spend is checked against the FY budget on submit</p>
+        </div>
+
+        <div class="form-group">
+          <label>Delivery date</label>
+          <input type="date" id="po-date" value="${new Date().toISOString().split('T')[0]}">
+        </div>
+
+        <div class="form-group">
+          <label>Remarks</label>
+          <textarea id="po-remarks" rows="2" placeholder="Remarks"></textarea>
+        </div>
+
+        <div class="item-lines" style="margin-top: 24px;">
+          <div class="item-lines-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h4 style="margin: 0;">Lines</h4>
+            <div style="display: flex; gap: 12px;">
+              <button type="button" class="btn btn-sm" style="color: var(--primary); background: none; border: none;">On-the-fly item</button>
+              <button type="button" class="btn btn-sm btn-primary" onclick="addPOLine()">+ Add line</button>
+            </div>
           </div>
-          <table class="data-table">
+          <table class="data-table" style="table-layout: fixed;">
             <thead>
               <tr>
-                <th>Item</th>
-                <th>Quantity</th>
-                <th>Unit Price</th>
-                <th>Total</th>
-                <th></th>
+                <th style="width: 45%;">Item</th>
+                <th style="width: 12%;">Qty</th>
+                <th style="width: 18%;">Price</th>
+                <th style="width: 12%;">Tax %</th>
+                <th style="width: 13%;"></th>
               </tr>
             </thead>
             <tbody id="po-lines">
               <tr>
                 <td>
-                  <select class="po-item" onchange="updatePOLineTotal(this)">
-                    <option value="">Select item...</option>
+                  <select class="po-item" onchange="updatePOLineTotal(this)" style="width: 100%;">
+                    <option value="">Item</option>
                     ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}">${i.name}</option>`).join('')}
                   </select>
                 </td>
-                <td><input type="number" class="po-qty" value="1" min="1" onchange="updatePOLineTotal(this)"></td>
-                <td><input type="number" class="po-rate" value="0" min="0" onchange="updatePOLineTotal(this)"></td>
-                <td class="po-line-total">₹0</td>
-                <td><button type="button" class="action-icon delete" onclick="removePOLine(this)">🗑️</button></td>
+                <td><input type="number" class="po-qty" value="1" min="1" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+                <td><input type="number" class="po-rate" value="0" min="0" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+                <td><input type="number" class="po-tax" value="18" min="0" max="100" style="width: 100%;"></td>
+                <td style="text-align: center;"><button type="button" class="action-icon delete" onclick="removePOLine(this)">🗑️</button></td>
               </tr>
             </tbody>
           </table>
@@ -1344,7 +1359,7 @@ function openPOModal() {
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="savePO()">Create PO</button>
+      <button class="btn btn-primary" onclick="savePO()">Create draft</button>
     </div>
   `;
 
@@ -1356,15 +1371,15 @@ function addPOLine() {
   const row = document.createElement('tr');
   row.innerHTML = `
     <td>
-      <select class="po-item" onchange="updatePOLineTotal(this)">
-        <option value="">Select item...</option>
+      <select class="po-item" onchange="updatePOLineTotal(this)" style="width: 100%;">
+        <option value="">Item</option>
         ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}">${i.name}</option>`).join('')}
       </select>
     </td>
-    <td><input type="number" class="po-qty" value="1" min="1" onchange="updatePOLineTotal(this)"></td>
-    <td><input type="number" class="po-rate" value="0" min="0" onchange="updatePOLineTotal(this)"></td>
-    <td class="po-line-total">₹0</td>
-    <td><button type="button" class="action-icon delete" onclick="removePOLine(this)">🗑️</button></td>
+    <td><input type="number" class="po-qty" value="1" min="1" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+    <td><input type="number" class="po-rate" value="0" min="0" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+    <td><input type="number" class="po-tax" value="18" min="0" max="100" style="width: 100%;"></td>
+    <td style="text-align: center;"><button type="button" class="action-icon delete" onclick="removePOLine(this)">🗑️</button></td>
   `;
   tbody.appendChild(row);
 }
@@ -3721,5 +3736,6 @@ function renderRoles() {
 // ============ MODAL HELPERS ============
 function closeModal() {
   modalOverlay.classList.add('hidden');
+  modalContent.classList.remove('modal-wide');
   modalContent.innerHTML = '';
 }
