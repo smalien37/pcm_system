@@ -1052,13 +1052,14 @@ function renderItems() {
   return `
     <div class="page-header">
       <div class="page-title">
-        <span class="page-title-icon">🏷️</span>
+        <span class="page-title-icon material-icons">category</span>
         <div>
           <h1>Items</h1>
           <p class="page-subtitle">SKU master with UOM, reorder & tracking — soft-delete to recycle bin.</p>
         </div>
       </div>
       <div class="page-actions">
+        <button class="btn btn-secondary" onclick="openSubGroupsModal()">Manage Sub Groups</button>
         <button class="btn btn-secondary" onclick="location.reload()">Refresh</button>
         <button class="btn btn-primary" id="btn-new-item">+ New Item</button>
       </div>
@@ -1187,6 +1188,7 @@ function openItemModal(itemId = null) {
               <option value="LTR" ${item?.uom === 'LTR' ? 'selected' : ''}>LTR (Liters)</option>
               <option value="KG" ${item?.uom === 'KG' ? 'selected' : ''}>KG (Kilograms)</option>
               <option value="MTR" ${item?.uom === 'MTR' ? 'selected' : ''}>MTR (Meters)</option>
+              <option value="SET" ${item?.uom === 'SET' ? 'selected' : ''}>SET (Set)</option>
             </select>
           </div>
           <div class="form-group">
@@ -1196,6 +1198,19 @@ function openItemModal(itemId = null) {
                 `<option value="${cat}" ${item?.category === cat ? 'selected' : ''}>${cat}</option>`
               ).join('')}
             </select>
+          </div>
+          <div class="form-group">
+            <label>Sub Group</label>
+            <select id="item-subgroup">
+              <option value="">Select Sub Group...</option>
+              ${AppData.itemSubGroups.map(sg =>
+                `<option value="${sg.id}" ${item?.subGroup === sg.id ? 'selected' : ''}>${sg.name}</option>`
+              ).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Default Rate</label>
+            <input type="number" id="item-rate" value="${item?.rate || 0}" min="0">
           </div>
           <div class="form-group">
             <label>Reorder Level</label>
@@ -1227,6 +1242,8 @@ function saveItem(itemId) {
   const name = document.getElementById('item-name').value;
   const uom = document.getElementById('item-uom').value;
   const category = document.getElementById('item-category').value;
+  const subGroup = document.getElementById('item-subgroup').value;
+  const rate = parseFloat(document.getElementById('item-rate').value) || 0;
   const reorder = parseInt(document.getElementById('item-reorder').value) || 0;
   const tracking = document.getElementById('item-tracking').value;
 
@@ -1238,7 +1255,7 @@ function saveItem(itemId) {
   if (itemId) {
     const idx = AppData.items.findIndex(i => i.id === itemId);
     if (idx !== -1) {
-      AppData.items[idx] = { ...AppData.items[idx], sku, name, uom, category, reorder, tracking };
+      AppData.items[idx] = { ...AppData.items[idx], sku, name, uom, category, subGroup, rate, reorder, tracking };
     }
   } else {
     AppData.items.push({
@@ -1247,6 +1264,8 @@ function saveItem(itemId) {
       name,
       uom,
       category,
+      subGroup,
+      rate,
       reorder,
       tracking,
       status: 'active'
@@ -1265,6 +1284,150 @@ function deleteItem(id) {
   if (confirm('Are you sure you want to delete this item?')) {
     AppData.items = AppData.items.filter(i => i.id !== id);
     renderPage('items');
+  }
+}
+
+// ============ ITEM SUB GROUPS ============
+function openSubGroupsModal() {
+  modalContent.classList.add('modal-wide');
+  modalContent.innerHTML = `
+    <div class="modal-header">
+      <h2>Manage Item Sub Groups</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <p style="color: var(--gray-500); margin: 0;">Sub groups help organize items and enable bulk selection when creating POs.</p>
+        <button class="btn btn-primary btn-sm" onclick="showAddSubGroupForm()">+ New Sub Group</button>
+      </div>
+
+      <div id="add-subgroup-form" class="hidden" style="background: var(--gray-50); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Sub Group Name *</label>
+            <input type="text" id="subgroup-name" placeholder="e.g., Lubricants & Oils">
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input type="text" id="subgroup-description" placeholder="e.g., Engine oils, greases, coolants">
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 12px;">
+          <button class="btn btn-primary btn-sm" onclick="saveSubGroup()">Save</button>
+          <button class="btn btn-secondary btn-sm" onclick="hideAddSubGroupForm()">Cancel</button>
+        </div>
+      </div>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Items Count</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="subgroups-table-body">
+          ${renderSubGroupRows()}
+        </tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+    </div>
+  `;
+
+  modalOverlay.classList.remove('hidden');
+}
+
+function renderSubGroupRows() {
+  return AppData.itemSubGroups.map(sg => {
+    const itemCount = AppData.items.filter(item => item.subGroup === sg.id).length;
+    return `
+      <tr>
+        <td><code>${sg.id}</code></td>
+        <td><strong>${sg.name}</strong></td>
+        <td>${sg.description}</td>
+        <td><span class="badge badge-default">${itemCount} items</span></td>
+        <td class="action-icons">
+          <button class="action-icon" onclick="editSubGroup('${sg.id}')" title="Edit">✏️</button>
+          <button class="action-icon delete" onclick="deleteSubGroup('${sg.id}')" title="Delete">🗑️</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function showAddSubGroupForm() {
+  document.getElementById('add-subgroup-form').classList.remove('hidden');
+  document.getElementById('subgroup-name').value = '';
+  document.getElementById('subgroup-description').value = '';
+  document.getElementById('subgroup-name').dataset.editId = '';
+}
+
+function hideAddSubGroupForm() {
+  document.getElementById('add-subgroup-form').classList.add('hidden');
+}
+
+function saveSubGroup() {
+  const nameInput = document.getElementById('subgroup-name');
+  const descInput = document.getElementById('subgroup-description');
+  const name = nameInput.value.trim();
+  const description = descInput.value.trim();
+  const editId = nameInput.dataset.editId;
+
+  if (!name) {
+    alert('Sub Group name is required');
+    return;
+  }
+
+  if (editId) {
+    // Update existing
+    const idx = AppData.itemSubGroups.findIndex(sg => sg.id === editId);
+    if (idx !== -1) {
+      AppData.itemSubGroups[idx].name = name;
+      AppData.itemSubGroups[idx].description = description;
+    }
+  } else {
+    // Create new
+    const id = 'SG-' + name.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
+
+    // Check if ID already exists
+    if (AppData.itemSubGroups.some(sg => sg.id === id)) {
+      alert('A sub group with a similar name already exists');
+      return;
+    }
+
+    AppData.itemSubGroups.push({ id, name, description });
+  }
+
+  // Refresh the table
+  document.getElementById('subgroups-table-body').innerHTML = renderSubGroupRows();
+  hideAddSubGroupForm();
+}
+
+function editSubGroup(id) {
+  const sg = AppData.itemSubGroups.find(s => s.id === id);
+  if (!sg) return;
+
+  document.getElementById('add-subgroup-form').classList.remove('hidden');
+  document.getElementById('subgroup-name').value = sg.name;
+  document.getElementById('subgroup-description').value = sg.description;
+  document.getElementById('subgroup-name').dataset.editId = id;
+}
+
+function deleteSubGroup(id) {
+  const itemCount = AppData.items.filter(item => item.subGroup === id).length;
+
+  if (itemCount > 0) {
+    alert(`Cannot delete: ${itemCount} item(s) are using this sub group. Please reassign them first.`);
+    return;
+  }
+
+  if (confirm('Are you sure you want to delete this sub group?')) {
+    AppData.itemSubGroups = AppData.itemSubGroups.filter(sg => sg.id !== id);
+    document.getElementById('subgroups-table-body').innerHTML = renderSubGroupRows();
   }
 }
 
@@ -1519,30 +1682,11 @@ function openPOModal() {
           </div>
         </div>
 
-        <div class="quick-add-section" style="margin-top: 24px; padding: 16px; background: var(--gray-50); border-radius: 8px; border: 1px dashed var(--gray-300);">
-          <label style="font-weight: 500; margin-bottom: 12px; display: block;">Quick Add Items</label>
-          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 200px;">
-              <select id="po-sub-group" onchange="addSubGroupItemsToPO()" style="width: 100%;">
-                <option value="">Select Item Sub Group...</option>
-              </select>
-              <p style="font-size: 11px; color: var(--gray-500); margin-top: 4px;">Adds all items from this sub group for the selected vendor</p>
-            </div>
-            <div style="flex: 1; min-width: 200px;">
-              <select id="po-item-group" onchange="addItemGroupToPO()" style="width: 100%;">
-                <option value="">Select Item Group (Kit)...</option>
-                ${AppData.itemGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
-              </select>
-              <p style="font-size: 11px; color: var(--gray-500); margin-top: 4px;">Adds predefined item kits with preset quantities</p>
-            </div>
-          </div>
-        </div>
-
         <div class="item-lines" style="margin-top: 24px;">
           <div class="item-lines-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
             <h4 style="margin: 0;">Lines</h4>
             <div style="display: flex; gap: 12px;">
-              <button type="button" class="btn btn-sm" style="color: var(--primary); background: none; border: none;">On-the-fly item</button>
+              <button type="button" class="btn btn-sm" style="color: var(--primary); background: none; border: none;" onclick="openOnTheFlyItemModal()">+ On-the-fly item</button>
               <button type="button" class="btn btn-sm btn-primary" onclick="addPOLine()">+ Add line</button>
             </div>
           </div>
@@ -1668,6 +1812,131 @@ function addPOLine(itemId = '', qty = 1, rate = 0) {
   `;
   tbody.appendChild(row);
   updatePOGrandTotal();
+}
+
+function openOnTheFlyItemModal() {
+  // Create a secondary modal overlay for on-the-fly item creation
+  const secondaryModal = document.createElement('div');
+  secondaryModal.id = 'secondary-modal-overlay';
+  secondaryModal.className = 'modal-overlay';
+  secondaryModal.style.zIndex = '1100';
+  secondaryModal.innerHTML = `
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>Create New Item (On-the-fly)</h2>
+        <button class="modal-close" onclick="closeOnTheFlyItemModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="otf-item-form">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>SKU / Part Number *</label>
+              <input type="text" id="otf-item-sku" required>
+            </div>
+            <div class="form-group">
+              <label>Name *</label>
+              <input type="text" id="otf-item-name" required>
+            </div>
+            <div class="form-group">
+              <label>Unit of Measure</label>
+              <select id="otf-item-uom">
+                <option value="NOS">NOS (Numbers)</option>
+                <option value="LTR">LTR (Liters)</option>
+                <option value="KG">KG (Kilograms)</option>
+                <option value="MTR">MTR (Meters)</option>
+                <option value="SET">SET (Set)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Category</label>
+              <select id="otf-item-category">
+                ${AppData.itemCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Sub Group</label>
+              <select id="otf-item-subgroup">
+                <option value="">Select Sub Group...</option>
+                ${AppData.itemSubGroups.map(sg => `<option value="${sg.id}">${sg.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Default Rate</label>
+              <input type="number" id="otf-item-rate" value="0" min="0">
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeOnTheFlyItemModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveOnTheFlyItem()">Create & Add to PO</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(secondaryModal);
+}
+
+function closeOnTheFlyItemModal() {
+  const secondaryModal = document.getElementById('secondary-modal-overlay');
+  if (secondaryModal) {
+    secondaryModal.remove();
+  }
+}
+
+function saveOnTheFlyItem() {
+  const sku = document.getElementById('otf-item-sku').value.trim();
+  const name = document.getElementById('otf-item-name').value.trim();
+  const uom = document.getElementById('otf-item-uom').value;
+  const category = document.getElementById('otf-item-category').value;
+  const subGroup = document.getElementById('otf-item-subgroup').value;
+  const rate = parseFloat(document.getElementById('otf-item-rate').value) || 0;
+
+  if (!sku || !name) {
+    alert('SKU and Name are required');
+    return;
+  }
+
+  // Check if SKU already exists
+  if (AppData.items.some(i => i.id === sku || i.sku === sku)) {
+    alert('An item with this SKU already exists');
+    return;
+  }
+
+  // Create the new item
+  const newItem = {
+    id: sku,
+    sku,
+    name,
+    uom,
+    category,
+    subGroup,
+    rate,
+    reorder: 0,
+    tracking: '-',
+    status: 'active'
+  };
+
+  AppData.items.push(newItem);
+
+  // Close the secondary modal
+  closeOnTheFlyItemModal();
+
+  // Add a new line with this item selected
+  addPOLine(sku, 1, rate);
+
+  // Refresh all item dropdowns in existing PO lines
+  refreshPOItemDropdowns();
+}
+
+function refreshPOItemDropdowns() {
+  const itemSelects = document.querySelectorAll('#po-lines .po-item');
+  itemSelects.forEach(select => {
+    const currentValue = select.value;
+    select.innerHTML = `
+      <option value="">Item</option>
+      ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}" ${i.id === currentValue ? 'selected' : ''}>${i.name}</option>`).join('')}
+    `;
+  });
 }
 
 function addItemGroupToPO() {
@@ -1867,7 +2136,7 @@ function renderGoodsReceipt() {
       </div>
       <div class="page-actions">
         <button class="btn btn-secondary" onclick="location.reload()">Refresh</button>
-        <button class="btn btn-secondary">Balances vs PO outstanding</button>
+        <button class="btn btn-secondary" onclick="openPOOutstandingModal()">Balances vs PO Outstanding</button>
         <button class="btn btn-primary" id="btn-new-grn">+ Receive against Vendors</button>
       </div>
     </div>
@@ -2031,8 +2300,8 @@ function openGRNModal() {
           <table class="data-table">
             <thead>
               <tr>
-                <th>Item</th>
                 <th>PO #</th>
+                <th>Item</th>
                 <th>Ordered</th>
                 <th>Previously Received</th>
                 <th>Receive Now</th>
@@ -2052,6 +2321,124 @@ function openGRNModal() {
   `;
 
   modalOverlay.classList.remove('hidden');
+}
+
+function openPOOutstandingModal() {
+  // Get all POs with pending items
+  const openPOs = AppData.purchaseOrders.filter(po => po.status !== 'Completed');
+
+  // Calculate outstanding items
+  const outstandingItems = [];
+  let totalOutstandingValue = 0;
+
+  openPOs.forEach(po => {
+    po.items.forEach(item => {
+      const pending = item.qty - item.received;
+      if (pending > 0) {
+        const value = pending * item.rate;
+        totalOutstandingValue += value;
+        outstandingItems.push({
+          poId: po.id,
+          poDate: po.date,
+          vendorName: po.vendorName,
+          siteName: po.siteName,
+          itemName: item.name,
+          ordered: item.qty,
+          received: item.received,
+          pending: pending,
+          rate: item.rate,
+          value: value
+        });
+      }
+    });
+  });
+
+  modalContent.classList.add('modal-wide');
+  modalContent.innerHTML = `
+    <div class="modal-header">
+      <h2>PO Outstanding Balances</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="stats-row" style="margin-bottom: 20px;">
+        <div class="stat-item">
+          <div class="stat-value red">${openPOs.length}</div>
+          <div class="stat-label">Open POs</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${outstandingItems.length}</div>
+          <div class="stat-label">Pending Line Items</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value green">₹${formatCurrency(totalOutstandingValue)}</div>
+          <div class="stat-label">Total Outstanding Value</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <input type="text" class="filter-input" id="outstanding-search" placeholder="Search by PO, vendor, or item..." onkeyup="filterOutstandingTable()" style="max-width: 300px;">
+      </div>
+
+      <div style="max-height: 400px; overflow-y: auto;">
+        <table class="data-table" id="outstanding-table">
+          <thead>
+            <tr>
+              <th>PO #</th>
+              <th>Date</th>
+              <th>Vendor</th>
+              <th>Site</th>
+              <th>Item</th>
+              <th>Ordered</th>
+              <th>Received</th>
+              <th>Pending</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${outstandingItems.length > 0 ? outstandingItems.map(item => `
+              <tr data-search="${item.poId.toLowerCase()} ${item.vendorName.toLowerCase()} ${item.itemName.toLowerCase()}">
+                <td><strong>${item.poId}</strong></td>
+                <td>${formatDate(item.poDate)}</td>
+                <td>${item.vendorName}</td>
+                <td>${item.siteName}</td>
+                <td>${item.itemName}</td>
+                <td>${item.ordered}</td>
+                <td>${item.received}</td>
+                <td><span class="badge badge-warning">${item.pending}</span></td>
+                <td>₹${formatCurrency(item.value)}</td>
+              </tr>
+            `).join('') : `
+              <tr>
+                <td colspan="9" style="text-align: center; padding: 40px; color: var(--gray-500);">
+                  <p style="font-size: 16px; margin-bottom: 8px;">🎉 All caught up!</p>
+                  <p>No outstanding PO balances. All items have been received.</p>
+                </td>
+              </tr>
+            `}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+    </div>
+  `;
+
+  modalOverlay.classList.remove('hidden');
+}
+
+function filterOutstandingTable() {
+  const search = document.getElementById('outstanding-search').value.toLowerCase();
+  const rows = document.querySelectorAll('#outstanding-table tbody tr[data-search]');
+
+  rows.forEach(row => {
+    const searchData = row.dataset.search || '';
+    if (searchData.includes(search)) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
 }
 
 function loadItemsForVendor() {
@@ -2137,8 +2524,8 @@ function updateGRNLines() {
 
   tbody.innerHTML = lines.map(line => `
     <tr data-po-id="${line.poId}" data-item-id="${line.itemId}">
-      <td>${line.item.name}</td>
       <td><span class="badge badge-default">${line.poId}</span></td>
+      <td>${line.item.name}</td>
       <td>${line.item.qty}</td>
       <td>${line.item.received}</td>
       <td>
