@@ -997,6 +997,10 @@ function renderItems() {
         <option value="">All Categories</option>
         ${AppData.itemCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
       </select>
+      <select class="filter-select" id="item-subgroup-filter">
+        <option value="">All Sub Groups</option>
+        ${AppData.itemSubGroups.map(sg => `<option value="${sg.id}">${sg.name}</option>`).join('')}
+      </select>
       <select class="filter-select" id="item-status-filter">
         <option value="">Status</option>
         <option value="active">Active</option>
@@ -1014,6 +1018,7 @@ function renderItems() {
             <th>Name</th>
             <th>UOM</th>
             <th>Category</th>
+            <th>Sub Group</th>
             <th>Reorder</th>
             <th>Tracking</th>
             <th>Status</th>
@@ -1032,16 +1037,21 @@ function setupItemHandlers() {
   document.getElementById('btn-new-item')?.addEventListener('click', () => openItemModal());
   document.getElementById('item-search')?.addEventListener('input', filterItems);
   document.getElementById('item-category-filter')?.addEventListener('change', filterItems);
+  document.getElementById('item-subgroup-filter')?.addEventListener('change', filterItems);
   document.getElementById('item-status-filter')?.addEventListener('change', filterItems);
 }
 
 function renderItemRows(items) {
-  return items.map(item => `
+  return items.map(item => {
+    const subGroup = AppData.itemSubGroups.find(sg => sg.id === item.subGroup);
+    const subGroupName = subGroup ? subGroup.name : '-';
+    return `
     <tr>
       <td>${item.sku}</td>
       <td><strong>${item.name}</strong></td>
       <td>${item.uom}</td>
       <td>${item.category}</td>
+      <td><span class="badge badge-default">${subGroupName}</span></td>
       <td>${item.reorder}</td>
       <td>${item.tracking}</td>
       <td><span class="badge ${getStatusBadgeClass(item.status)}">${item.status}</span></td>
@@ -1049,13 +1059,14 @@ function renderItemRows(items) {
         <button class="action-icon" onclick="editItem('${item.id}')" title="Edit">✏️</button>
         <button class="action-icon delete" onclick="deleteItem('${item.id}')" title="Delete">🗑️</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 function filterItems() {
   const search = document.getElementById('item-search').value.toLowerCase();
   const category = document.getElementById('item-category-filter').value;
+  const subGroup = document.getElementById('item-subgroup-filter').value;
   const status = document.getElementById('item-status-filter').value;
 
   const filtered = AppData.items.filter(item => {
@@ -1063,8 +1074,9 @@ function filterItems() {
       item.name.toLowerCase().includes(search) ||
       item.sku.toLowerCase().includes(search);
     const matchesCategory = !category || item.category === category;
+    const matchesSubGroup = !subGroup || item.subGroup === subGroup;
     const matchesStatus = !status || item.status === status;
-    return matchesSearch && matchesCategory && matchesStatus;
+    return matchesSearch && matchesCategory && matchesSubGroup && matchesStatus;
   });
 
   document.querySelector('#items-table tbody').innerHTML = renderItemRows(filtered);
@@ -1392,7 +1404,7 @@ function openPOModal() {
         <div class="form-grid">
           <div class="form-group">
             <label>Vendor *</label>
-            <select id="po-vendor" required>
+            <select id="po-vendor" required onchange="loadVendorSubGroups()">
               <option value="">Vendor *</option>
               ${AppData.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
             </select>
@@ -1418,23 +1430,33 @@ function openPOModal() {
           <p style="font-size: 12px; color: var(--gray-500); margin-top: 4px;">Links this PO to a budget; spend is checked against the FY budget on submit</p>
         </div>
 
-        <div class="form-group">
-          <label>Delivery date</label>
-          <input type="date" id="po-date" value="${new Date().toISOString().split('T')[0]}">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Delivery date</label>
+            <input type="date" id="po-date" value="${new Date().toISOString().split('T')[0]}">
+          </div>
+          <div class="form-group">
+            <label>Remarks</label>
+            <textarea id="po-remarks" rows="2" placeholder="Remarks"></textarea>
+          </div>
         </div>
 
-        <div class="form-group">
-          <label>Remarks</label>
-          <textarea id="po-remarks" rows="2" placeholder="Remarks"></textarea>
-        </div>
-
-        <div class="item-group-section" style="margin-top: 24px; padding: 16px; background: var(--gray-50); border-radius: 8px; border: 1px dashed var(--gray-300);">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <label style="margin: 0; font-weight: 500; white-space: nowrap;">Quick Add Item Group:</label>
-            <select id="po-item-group" onchange="addItemGroupToPO()" style="flex: 1;">
-              <option value="">Select Item Group to auto-add items...</option>
-              ${AppData.itemGroups.map(g => `<option value="${g.id}">${g.name} - ${g.description}</option>`).join('')}
-            </select>
+        <div class="quick-add-section" style="margin-top: 24px; padding: 16px; background: var(--gray-50); border-radius: 8px; border: 1px dashed var(--gray-300);">
+          <label style="font-weight: 500; margin-bottom: 12px; display: block;">Quick Add Items</label>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+              <select id="po-sub-group" onchange="addSubGroupItemsToPO()" style="width: 100%;">
+                <option value="">Select Item Sub Group...</option>
+              </select>
+              <p style="font-size: 11px; color: var(--gray-500); margin-top: 4px;">Adds all items from this sub group for the selected vendor</p>
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+              <select id="po-item-group" onchange="addItemGroupToPO()" style="width: 100%;">
+                <option value="">Select Item Group (Kit)...</option>
+                ${AppData.itemGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
+              </select>
+              <p style="font-size: 11px; color: var(--gray-500); margin-top: 4px;">Adds predefined item kits with preset quantities</p>
+            </div>
           </div>
         </div>
 
@@ -1484,6 +1506,71 @@ function openPOModal() {
   `;
 
   modalOverlay.classList.remove('hidden');
+}
+
+function loadVendorSubGroups() {
+  const vendorId = document.getElementById('po-vendor').value;
+  const subGroupSelect = document.getElementById('po-sub-group');
+
+  if (!vendorId) {
+    subGroupSelect.innerHTML = '<option value="">Select Item Sub Group...</option>';
+    return;
+  }
+
+  const vendor = AppData.vendors.find(v => v.id === vendorId);
+  if (!vendor || !vendor.subGroups) {
+    subGroupSelect.innerHTML = '<option value="">No sub groups available</option>';
+    return;
+  }
+
+  const vendorSubGroups = AppData.itemSubGroups.filter(sg => vendor.subGroups.includes(sg.id));
+
+  subGroupSelect.innerHTML = `
+    <option value="">Select Item Sub Group...</option>
+    ${vendorSubGroups.map(sg => `<option value="${sg.id}">${sg.name} - ${sg.description}</option>`).join('')}
+  `;
+}
+
+function addSubGroupItemsToPO() {
+  const subGroupSelect = document.getElementById('po-sub-group');
+  const subGroupId = subGroupSelect.value;
+  const vendorId = document.getElementById('po-vendor').value;
+
+  if (!subGroupId || !vendorId) return;
+
+  const vendor = AppData.vendors.find(v => v.id === vendorId);
+  if (!vendor) return;
+
+  // Get items that belong to this sub group AND are supplied by this vendor
+  const subGroupItems = AppData.items.filter(item =>
+    item.subGroup === subGroupId && vendor.itemIds.includes(item.id)
+  );
+
+  if (subGroupItems.length === 0) {
+    alert('No items found for this sub group from the selected vendor.');
+    subGroupSelect.value = '';
+    return;
+  }
+
+  // Clear existing empty rows
+  const existingRows = document.querySelectorAll('#po-lines tr');
+  existingRows.forEach(row => {
+    const itemSelect = row.querySelector('.po-item');
+    if (itemSelect && !itemSelect.value) {
+      row.remove();
+    }
+  });
+
+  // Add each item from the sub group
+  subGroupItems.forEach(item => {
+    addPOLine(item.id, 1, item.rate);
+  });
+
+  // Reset the dropdown
+  subGroupSelect.value = '';
+
+  // Update grand total
+  updatePOGrandTotal();
 }
 
 function addPOLine(itemId = '', qty = 1, rate = 0) {
@@ -1841,16 +1928,15 @@ function openGRNModal() {
         <div class="form-grid">
           <div class="form-group full-width">
             <label>Select Vendor</label>
-            <select id="grn-vendor" required onchange="loadPOsForVendor()">
+            <select id="grn-vendor" required onchange="loadItemsForVendor()">
               <option value="">Select Vendor...</option>
               ${vendorsWithOpenPOs.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
             </select>
           </div>
-          <div class="form-group full-width hidden" id="grn-po-container">
-            <label>Select Purchase Order</label>
-            <select id="grn-po" required onchange="loadPOForGRN()">
-              <option value="">Select Purchase Order...</option>
-            </select>
+          <div class="form-group full-width hidden" id="grn-items-container">
+            <label>Select Items to Receive (multiple)</label>
+            <div id="grn-items-checklist" class="items-checklist">
+            </div>
           </div>
           <div class="form-group">
             <label>Delivery Challan / Invoice No.</label>
@@ -1868,6 +1954,7 @@ function openGRNModal() {
             <thead>
               <tr>
                 <th>Item</th>
+                <th>PO #</th>
                 <th>Ordered</th>
                 <th>Previously Received</th>
                 <th>Receive Now</th>
@@ -1889,59 +1976,102 @@ function openGRNModal() {
   modalOverlay.classList.remove('hidden');
 }
 
-function loadPOsForVendor() {
+function loadItemsForVendor() {
   const vendorId = document.getElementById('grn-vendor').value;
-  const poContainer = document.getElementById('grn-po-container');
-  const poSelect = document.getElementById('grn-po');
+  const itemsContainer = document.getElementById('grn-items-container');
+  const itemsChecklist = document.getElementById('grn-items-checklist');
   const linesContainer = document.getElementById('grn-lines-container');
 
   if (!vendorId) {
-    poContainer.classList.add('hidden');
+    itemsContainer.classList.add('hidden');
     linesContainer.classList.add('hidden');
     return;
   }
 
+  // Get all open POs for this vendor
   const openPOs = AppData.purchaseOrders.filter(po => po.vendorId === vendorId && po.status !== 'Completed');
 
-  poSelect.innerHTML = `
-    <option value="">Select Purchase Order...</option>
-    ${openPOs.map(po => `<option value="${po.id}">${po.id} (${po.status})</option>`).join('')}
-  `;
+  // Get unique items from all open POs with pending quantities
+  const itemsMap = {};
+  openPOs.forEach(po => {
+    po.items.forEach(item => {
+      const pending = item.qty - item.received;
+      if (pending > 0) {
+        const key = `${po.id}|${item.itemId}`;
+        itemsMap[key] = {
+          poId: po.id,
+          itemId: item.itemId,
+          name: item.name,
+          qty: item.qty,
+          received: item.received,
+          pending: pending,
+          rate: item.rate
+        };
+      }
+    });
+  });
 
-  poContainer.classList.remove('hidden');
+  const itemsList = Object.values(itemsMap);
+
+  if (itemsList.length === 0) {
+    itemsChecklist.innerHTML = '<p style="color: var(--gray-500); padding: 12px;">No pending items for this vendor.</p>';
+    itemsContainer.classList.remove('hidden');
+    linesContainer.classList.add('hidden');
+    return;
+  }
+
+  itemsChecklist.innerHTML = itemsList.map(item => `
+    <label class="item-checkbox">
+      <input type="checkbox" value="${item.poId}|${item.itemId}" onchange="updateGRNLines()">
+      <span class="item-info">
+        <strong>${item.name}</strong>
+        <span class="item-meta">PO: ${item.poId} | Pending: ${item.pending}</span>
+      </span>
+    </label>
+  `).join('');
+
+  itemsContainer.classList.remove('hidden');
   linesContainer.classList.add('hidden');
 }
 
-function loadPOForGRN() {
-  const poId = document.getElementById('grn-po').value;
+function updateGRNLines() {
   const container = document.getElementById('grn-lines-container');
   const tbody = document.getElementById('grn-lines');
+  const vendorId = document.getElementById('grn-vendor').value;
 
-  if (!poId) {
+  // Get all checked items
+  const checkedItems = Array.from(document.querySelectorAll('#grn-items-checklist input:checked'))
+    .map(cb => cb.value);
+
+  if (checkedItems.length === 0) {
     container.classList.add('hidden');
     return;
   }
 
-  const po = AppData.purchaseOrders.find(p => p.id === poId);
-  if (!po) return;
+  // Build the lines from checked items
+  const lines = checkedItems.map(key => {
+    const [poId, itemId] = key.split('|');
+    const po = AppData.purchaseOrders.find(p => p.id === poId);
+    const item = po.items.find(i => i.itemId === itemId);
+    const pending = item.qty - item.received;
+    return { poId, itemId, item, pending };
+  });
+
+  tbody.innerHTML = lines.map(line => `
+    <tr data-po-id="${line.poId}" data-item-id="${line.itemId}">
+      <td>${line.item.name}</td>
+      <td><span class="badge badge-default">${line.poId}</span></td>
+      <td>${line.item.qty}</td>
+      <td>${line.item.received}</td>
+      <td>
+        <input type="number" class="grn-receive-qty" value="${line.pending}" min="0" max="${line.pending}"
+               onchange="updateGRNBalance(this, ${line.item.qty}, ${line.item.received})" style="width: 80px;">
+      </td>
+      <td class="grn-balance">0</td>
+    </tr>
+  `).join('');
 
   container.classList.remove('hidden');
-
-  tbody.innerHTML = po.items.map(item => {
-    const pending = item.qty - item.received;
-    return `
-      <tr data-item-id="${item.itemId}">
-        <td>${item.name}</td>
-        <td>${item.qty}</td>
-        <td>${item.received}</td>
-        <td>
-          <input type="number" class="grn-receive-qty" value="0" min="0" max="${pending}"
-                 onchange="updateGRNBalance(this, ${item.qty}, ${item.received})">
-        </td>
-        <td class="grn-balance">${pending}</td>
-      </tr>
-    `;
-  }).join('');
 }
 
 function updateGRNBalance(input, ordered, prevReceived) {

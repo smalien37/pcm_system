@@ -10,6 +10,7 @@ const AppData = {
       address: '123 Industrial Area, Mumbai',
       category: 'Spare Parts',
       categories: ['Spare Parts', 'Lubricants'],
+      subGroups: ['SG-TYRES', 'SG-FILTERS', 'SG-LUBRICANTS', 'SG-BRAKES'],
       itemIds: ['TYRE-295', 'FILTER-OF', 'FILTER-AF', 'OIL-15W40', 'BRAKE-PAD'],
       status: 'active'
     },
@@ -21,6 +22,7 @@ const AppData = {
       address: '456 Steel City, Jamshedpur',
       category: 'Heavy Equipment OEM',
       categories: ['Heavy Equipment OEM', 'Spare Parts'],
+      subGroups: ['SG-BRAKES', 'SG-BELTS', 'SG-FILTERS'],
       itemIds: ['BRAKE-PAD', 'BELT-FAN', 'FILTER-OF', 'FILTER-AF'],
       status: 'active'
     },
@@ -32,6 +34,7 @@ const AppData = {
       address: '789 Petro Hub, Chennai',
       category: 'Lubricants/Fuel',
       categories: ['Lubricants/Fuel'],
+      subGroups: ['SG-FUEL', 'SG-LUBRICANTS'],
       itemIds: ['HSD-FUEL', 'OIL-15W40', 'GREASE-EP2', 'COOLANT-10L'],
       status: 'active'
     },
@@ -43,6 +46,7 @@ const AppData = {
       address: '321 Market Road, Bangalore',
       category: 'Local Hardware',
       categories: ['Local Hardware', 'Spare Parts'],
+      subGroups: ['SG-HARDWARE', 'SG-FILTERS', 'SG-BELTS'],
       itemIds: ['BOLT-M12', 'FILTER-OF', 'FILTER-AF', 'BELT-FAN'],
       status: 'active'
     },
@@ -54,6 +58,7 @@ const AppData = {
       address: '45 Tyre Park, Chennai',
       category: 'Tyres',
       categories: ['Tyres'],
+      subGroups: ['SG-TYRES'],
       itemIds: ['TYRE-295'],
       status: 'active'
     },
@@ -65,6 +70,7 @@ const AppData = {
       address: '78 Lubricant Tower, Mumbai',
       category: 'Lubricants/Fuel',
       categories: ['Lubricants/Fuel'],
+      subGroups: ['SG-LUBRICANTS'],
       itemIds: ['OIL-15W40', 'GREASE-EP2', 'COOLANT-10L'],
       status: 'active'
     },
@@ -76,6 +82,7 @@ const AppData = {
       address: '234 Auto Hub, Bangalore',
       category: 'Spare Parts',
       categories: ['Spare Parts', 'Filters'],
+      subGroups: ['SG-FILTERS', 'SG-BRAKES', 'SG-BELTS'],
       itemIds: ['FILTER-OF', 'FILTER-AF', 'BRAKE-PAD', 'BELT-FAN'],
       status: 'active'
     },
@@ -87,6 +94,7 @@ const AppData = {
       address: '1 Fuel Depot, New Delhi',
       category: 'Lubricants/Fuel',
       categories: ['Lubricants/Fuel'],
+      subGroups: ['SG-FUEL', 'SG-LUBRICANTS'],
       itemIds: ['HSD-FUEL', 'OIL-15W40'],
       status: 'active'
     },
@@ -98,6 +106,7 @@ const AppData = {
       address: '567 Auto Lane, Pune',
       category: 'Spare Parts',
       categories: ['Spare Parts', 'Heavy Equipment OEM'],
+      subGroups: ['SG-BRAKES', 'SG-BELTS', 'SG-FILTERS', 'SG-LUBRICANTS'],
       itemIds: ['BRAKE-PAD', 'BELT-FAN', 'FILTER-OF', 'FILTER-AF', 'COOLANT-10L'],
       status: 'active'
     },
@@ -109,6 +118,7 @@ const AppData = {
       address: '89 Rubber Road, Gurgaon',
       category: 'Tyres',
       categories: ['Tyres'],
+      subGroups: ['SG-TYRES'],
       itemIds: ['TYRE-295'],
       status: 'active'
     },
@@ -120,6 +130,7 @@ const AppData = {
       address: '12 Refinery Complex, Mumbai',
       category: 'Lubricants/Fuel',
       categories: ['Lubricants/Fuel'],
+      subGroups: ['SG-FUEL', 'SG-LUBRICANTS'],
       itemIds: ['HSD-FUEL', 'OIL-15W40', 'GREASE-EP2'],
       status: 'active'
     },
@@ -131,23 +142,35 @@ const AppData = {
       address: '34 Industrial Estate, Chennai',
       category: 'Local Hardware',
       categories: ['Local Hardware'],
+      subGroups: ['SG-HARDWARE'],
       itemIds: ['BOLT-M12'],
       status: 'active'
     }
   ],
 
+  // Item Sub Groups
+  itemSubGroups: [
+    { id: 'SG-TYRES', name: 'Tyres & Tubes', description: 'All tyre related items' },
+    { id: 'SG-LUBRICANTS', name: 'Lubricants & Oils', description: 'Engine oils, greases, coolants' },
+    { id: 'SG-FILTERS', name: 'Filters', description: 'Oil, air, fuel filters' },
+    { id: 'SG-FUEL', name: 'Fuel', description: 'HSD, petrol and other fuels' },
+    { id: 'SG-HARDWARE', name: 'Hardware & Fasteners', description: 'Bolts, nuts, fasteners' },
+    { id: 'SG-BRAKES', name: 'Brake Components', description: 'Brake pads, shoes, discs' },
+    { id: 'SG-BELTS', name: 'Belts & Hoses', description: 'Fan belts, timing belts, hoses' }
+  ],
+
   // Items Master
   items: [
-    { id: 'TYRE-295', sku: 'TYRE-295', name: 'Tyre 295/80R22.5', uom: 'NOS', category: 'Tyres', reorder: 10, tracking: 'Batch', status: 'active', rate: 15000 },
-    { id: 'OIL-15W40', sku: 'OIL-15W40', name: 'Engine Oil 15W40', uom: 'LTR', category: 'Lubricants', reorder: 50, tracking: 'Batch', status: 'active', rate: 350 },
-    { id: 'FILTER-OF', sku: 'FILTER-OF', name: 'Oil Filter', uom: 'NOS', category: 'Filters', reorder: 25, tracking: '-', status: 'active', rate: 850 },
-    { id: 'FILTER-AF', sku: 'FILTER-AF', name: 'Air Filter', uom: 'NOS', category: 'Filters', reorder: 20, tracking: '-', status: 'active', rate: 1200 },
-    { id: 'HSD-FUEL', sku: 'HSD-FUEL', name: 'HSD Fuel', uom: 'LTR', category: 'Fuel', reorder: 500, tracking: '-', status: 'active', rate: 95 },
-    { id: 'BOLT-M12', sku: 'BOLT-M12', name: 'Hex Bolt M12x50', uom: 'NOS', category: 'Hardware', reorder: 100, tracking: '-', status: 'active', rate: 25 },
-    { id: 'GREASE-EP2', sku: 'GREASE-EP2', name: 'EP2 Grease', uom: 'KG', category: 'Lubricants', reorder: 20, tracking: '-', status: 'active', rate: 180 },
-    { id: 'COOLANT-10L', sku: 'COOLANT-10L', name: 'Radiator Coolant 10L', uom: 'NOS', category: 'Lubricants', reorder: 15, tracking: 'Batch', status: 'active', rate: 950 },
-    { id: 'BRAKE-PAD', sku: 'BRAKE-PAD', name: 'Brake Pad Set', uom: 'SET', category: 'Spare Parts', reorder: 10, tracking: '-', status: 'active', rate: 3500 },
-    { id: 'BELT-FAN', sku: 'BELT-FAN', name: 'Fan Belt', uom: 'NOS', category: 'Spare Parts', reorder: 8, tracking: '-', status: 'active', rate: 650 }
+    { id: 'TYRE-295', sku: 'TYRE-295', name: 'Tyre 295/80R22.5', uom: 'NOS', category: 'Tyres', subGroup: 'SG-TYRES', reorder: 10, tracking: 'Batch', status: 'active', rate: 15000 },
+    { id: 'OIL-15W40', sku: 'OIL-15W40', name: 'Engine Oil 15W40', uom: 'LTR', category: 'Lubricants', subGroup: 'SG-LUBRICANTS', reorder: 50, tracking: 'Batch', status: 'active', rate: 350 },
+    { id: 'FILTER-OF', sku: 'FILTER-OF', name: 'Oil Filter', uom: 'NOS', category: 'Filters', subGroup: 'SG-FILTERS', reorder: 25, tracking: '-', status: 'active', rate: 850 },
+    { id: 'FILTER-AF', sku: 'FILTER-AF', name: 'Air Filter', uom: 'NOS', category: 'Filters', subGroup: 'SG-FILTERS', reorder: 20, tracking: '-', status: 'active', rate: 1200 },
+    { id: 'HSD-FUEL', sku: 'HSD-FUEL', name: 'HSD Fuel', uom: 'LTR', category: 'Fuel', subGroup: 'SG-FUEL', reorder: 500, tracking: '-', status: 'active', rate: 95 },
+    { id: 'BOLT-M12', sku: 'BOLT-M12', name: 'Hex Bolt M12x50', uom: 'NOS', category: 'Hardware', subGroup: 'SG-HARDWARE', reorder: 100, tracking: '-', status: 'active', rate: 25 },
+    { id: 'GREASE-EP2', sku: 'GREASE-EP2', name: 'EP2 Grease', uom: 'KG', category: 'Lubricants', subGroup: 'SG-LUBRICANTS', reorder: 20, tracking: '-', status: 'active', rate: 180 },
+    { id: 'COOLANT-10L', sku: 'COOLANT-10L', name: 'Radiator Coolant 10L', uom: 'NOS', category: 'Lubricants', subGroup: 'SG-LUBRICANTS', reorder: 15, tracking: 'Batch', status: 'active', rate: 950 },
+    { id: 'BRAKE-PAD', sku: 'BRAKE-PAD', name: 'Brake Pad Set', uom: 'SET', category: 'Spare Parts', subGroup: 'SG-BRAKES', reorder: 10, tracking: '-', status: 'active', rate: 3500 },
+    { id: 'BELT-FAN', sku: 'BELT-FAN', name: 'Fan Belt', uom: 'NOS', category: 'Spare Parts', subGroup: 'SG-BELTS', reorder: 8, tracking: '-', status: 'active', rate: 650 }
   ],
 
   // Item Groups - predefined sets of items for quick PO creation
