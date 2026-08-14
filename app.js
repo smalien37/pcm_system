@@ -813,6 +813,7 @@ function renderVendors() {
             <th>Contact</th>
             <th>Status</th>
             <th>Categories</th>
+            <th>Item Sub Groups</th>
             <th></th>
           </tr>
         </thead>
@@ -825,19 +826,25 @@ function renderVendors() {
 }
 
 function renderVendorRows(vendors) {
-  return vendors.map(v => `
+  return vendors.map(v => {
+    const subGroupNames = (v.subGroups || []).map(sgId => {
+      const sg = AppData.itemSubGroups.find(s => s.id === sgId);
+      return sg ? sg.name : sgId;
+    });
+    return `
     <tr>
       <td>${v.id}</td>
       <td><strong>${v.name}</strong></td>
       <td>${v.contact}</td>
       <td><span class="badge ${getStatusBadgeClass(v.status)}">${v.status}</span></td>
       <td>${v.categories.join(', ')}</td>
+      <td>${subGroupNames.map(name => `<span class="badge badge-default">${name}</span>`).join(' ')}</td>
       <td class="action-icons">
         <button class="action-icon" onclick="editVendor('${v.id}')" title="Edit">✏️</button>
         <button class="action-icon delete" onclick="deleteVendor('${v.id}')" title="Delete">🗑️</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 function setupVendorHandlers() {
@@ -866,6 +873,8 @@ function filterVendors() {
 function openVendorModal(vendorId = null) {
   const vendor = vendorId ? AppData.vendors.find(v => v.id === vendorId) : null;
   const title = vendor ? 'Edit Vendor' : 'New Vendor';
+
+  const vendorSubGroups = vendor?.subGroups || [];
 
   modalContent.innerHTML = `
     <div class="modal-header">
@@ -900,8 +909,39 @@ function openVendorModal(vendorId = null) {
             <textarea id="vendor-address" rows="2">${vendor?.address || ''}</textarea>
           </div>
           <div class="form-group full-width">
-            <label>Supplied Items (comma separated)</label>
-            <input type="text" id="vendor-items" value="${vendor?.items?.join(', ') || ''}" placeholder="Tires, Filters, Engine Oil...">
+            <label>Item Sub Groups <span style="font-weight: normal; color: var(--gray-500);">(select to add all items in the group)</span></label>
+            <div class="subgroup-checklist">
+              ${AppData.itemSubGroups.map(sg => `
+                <label class="subgroup-checkbox">
+                  <input type="checkbox" name="vendor-subgroups" value="${sg.id}"
+                    ${vendorSubGroups.includes(sg.id) ? 'checked' : ''}
+                    onchange="updateVendorItemsFromSubGroups()">
+                  <span class="subgroup-info">
+                    <strong>${sg.name}</strong>
+                    <span>${sg.description}</span>
+                  </span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+          <div class="form-group full-width">
+            <label>Individual Items <span style="font-weight: normal; color: var(--gray-500);">(fine-tune selection - add/remove specific items)</span></label>
+            <input type="text" id="vendor-items-search" placeholder="Search items..." onkeyup="filterVendorItems()" style="margin-bottom: 8px;">
+            <div class="items-checklist" id="vendor-items-checklist">
+              ${AppData.items.map(item => {
+                const sg = AppData.itemSubGroups.find(s => s.id === item.subGroup);
+                const sgName = sg ? sg.name : 'Other';
+                const isChecked = vendor?.itemIds?.includes(item.id) || false;
+                return `
+                <label class="item-checkbox" data-name="${item.name.toLowerCase()}" data-sku="${item.sku.toLowerCase()}" data-subgroup="${sgName.toLowerCase()}">
+                  <input type="checkbox" name="vendor-items" value="${item.id}" ${isChecked ? 'checked' : ''}>
+                  <span class="item-info">
+                    <strong>${item.name}</strong>
+                    <span class="item-meta">${item.sku} | ${sgName}</span>
+                  </span>
+                </label>`;
+              }).join('')}
+            </div>
           </div>
         </div>
       </form>
@@ -915,14 +955,51 @@ function openVendorModal(vendorId = null) {
   modalOverlay.classList.remove('hidden');
 }
 
+function filterVendorItems() {
+  const search = document.getElementById('vendor-items-search').value.toLowerCase();
+  const items = document.querySelectorAll('#vendor-items-checklist .item-checkbox');
+
+  items.forEach(item => {
+    const name = item.dataset.name || '';
+    const sku = item.dataset.sku || '';
+    const subgroup = item.dataset.subgroup || '';
+
+    if (name.includes(search) || sku.includes(search) || subgroup.includes(search)) {
+      item.style.display = '';
+    } else {
+      item.style.display = 'none';
+    }
+  });
+}
+
+function updateVendorItemsFromSubGroups() {
+  const checkedSubGroups = Array.from(document.querySelectorAll('input[name="vendor-subgroups"]:checked'))
+    .map(cb => cb.value);
+
+  // For each item, check if its subGroup is selected
+  document.querySelectorAll('input[name="vendor-items"]').forEach(checkbox => {
+    const itemId = checkbox.value;
+    const item = AppData.items.find(i => i.id === itemId);
+    if (item && checkedSubGroups.includes(item.subGroup)) {
+      checkbox.checked = true;
+    }
+  });
+}
+
 function saveVendor(vendorId) {
   const name = document.getElementById('vendor-name').value;
   const email = document.getElementById('vendor-email').value;
   const phone = document.getElementById('vendor-phone').value;
   const category = document.getElementById('vendor-category').value;
   const address = document.getElementById('vendor-address').value;
-  const itemsStr = document.getElementById('vendor-items').value;
-  const items = itemsStr.split(',').map(i => i.trim()).filter(i => i);
+
+  // Get selected sub groups
+  const subGroupCheckboxes = document.querySelectorAll('input[name="vendor-subgroups"]:checked');
+  const subGroups = Array.from(subGroupCheckboxes).map(cb => cb.value);
+
+  // Get individually selected items (this is the source of truth)
+  const itemCheckboxes = document.querySelectorAll('input[name="vendor-items"]:checked');
+  const itemIds = Array.from(itemCheckboxes).map(cb => cb.value);
 
   if (!name) {
     alert('Vendor name is required');
@@ -935,7 +1012,7 @@ function saveVendor(vendorId) {
     if (idx !== -1) {
       AppData.vendors[idx] = {
         ...AppData.vendors[idx],
-        name, contact: email, phone, category, categories: [category], address, items
+        name, contact: email, phone, category, categories: [category], address, subGroups, itemIds
       };
     }
   } else {
@@ -948,7 +1025,8 @@ function saveVendor(vendorId) {
       category,
       categories: [category],
       address,
-      items,
+      subGroups,
+      itemIds,
       status: 'active'
     };
     AppData.vendors.push(newVendor);
