@@ -208,6 +208,56 @@ input:focus, select:focus, textarea:focus {
   color: var(--gray-500);
 }
 
+/* Subgroup checklist for vendor modal */
+.subgroup-checklist {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--white);
+}
+
+.subgroup-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.subgroup-checkbox:hover {
+  background: var(--gray-50);
+}
+
+.subgroup-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.subgroup-checkbox .subgroup-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.subgroup-checkbox .subgroup-info strong {
+  font-size: 13px;
+  color: var(--gray-800);
+}
+
+.subgroup-checkbox .subgroup-info span {
+  font-size: 11px;
+  color: var(--gray-500);
+}
+
 .password-input {
   position: relative;
 }
