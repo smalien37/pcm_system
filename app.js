@@ -329,23 +329,34 @@ function waitForNavKey() {
 }
 
 // Auth Handlers
+const ALL_SITES = ['SITE-A', 'SITE-B', 'SITE-C', 'SITE-D', 'SITE-E', 'WH-CENTRAL', 'WH-NORTH', 'WH-SOUTH'];
+
 const VALID_CREDENTIALS = [
-  { email: 'admin@synesisconsulting.app', password: 'Demo@2026' },
-  { email: 'demo@synesisconsulting.app', password: 'Demo@2026' },
-  // Add more credentials here as needed
+  { email: 'superadmin@pms.local', password: 'Demo@2026', name: 'Super Admin', role: 'Super Admin', sites: ALL_SITES },
+  { email: 'admin@synesisconsulting.app', password: 'Demo@2026', name: 'System Admin', role: 'Administrator', sites: ['SITE-A', 'SITE-B', 'SITE-C', 'WH-CENTRAL'] },
+  { email: 'demo@synesisconsulting.app', password: 'Demo@2026', name: 'Demo User', role: 'Viewer', sites: ['SITE-A', 'SITE-B', 'WH-CENTRAL'] },
+  { email: 'finance@pms.local', password: 'Demo@2026', name: 'Fiona Finance', role: 'Finance', sites: ['WH-CENTRAL', 'WH-NORTH', 'WH-SOUTH'] },
+  { email: 'store@pms.local', password: 'Demo@2026', name: 'Sam Store', role: 'Store Keeper', sites: ['SITE-A', 'WH-CENTRAL'] },
+  { email: 'executive@pms.local', password: 'Demo@2026', name: 'Evan Exec', role: 'Purchase Executive', sites: ['SITE-A', 'SITE-B', 'SITE-C'] },
+  { email: 'purchase@pms.local', password: 'Demo@2026', name: 'Priya Purchase', role: 'Purchase Manager', sites: ['SITE-A', 'SITE-B', 'SITE-C', 'WH-CENTRAL', 'WH-NORTH'] },
+  { email: 'super@pms.local', password: 'Demo@2026', name: 'Super User', role: 'Super Admin', sites: ALL_SITES },
 ];
+
+let currentUser = null;
 
 function handleLogin(e) {
   e.preventDefault();
-  const email = document.getElementById('email').value;
+  const email = document.getElementById('email').value.trim().toLowerCase();
   const password = document.getElementById('password').value;
 
-  const isValid = VALID_CREDENTIALS.some(
-    cred => cred.email === email && cred.password === password
+  const user = VALID_CREDENTIALS.find(
+    cred => cred.email.toLowerCase() === email && cred.password === password
   );
 
-  if (isValid) {
+  if (user) {
+    currentUser = user;
     sessionStorage.setItem('loggedIn', 'true');
+    sessionStorage.setItem('currentUser', JSON.stringify(user));
     showMainApp();
   } else {
     alert('Invalid email or password. Please try again.');
@@ -354,14 +365,72 @@ function handleLogin(e) {
 
 function handleLogout() {
   sessionStorage.removeItem('loggedIn');
+  sessionStorage.removeItem('currentUser');
+  currentUser = null;
   mainApp.classList.add('hidden');
   loginScreen.classList.remove('hidden');
 }
 
 function showMainApp() {
+  // Restore user from session if page was refreshed
+  if (!currentUser) {
+    const storedUser = sessionStorage.getItem('currentUser');
+    if (storedUser) {
+      currentUser = JSON.parse(storedUser);
+    }
+  }
+
   loginScreen.classList.add('hidden');
   mainApp.classList.remove('hidden');
+  updateTopBarUserInfo();
   navigateTo('dashboard');
+}
+
+function updateTopBarUserInfo() {
+  const topBarActions = document.querySelector('.top-bar-actions');
+  if (topBarActions && currentUser) {
+    const userSites = currentUser.sites.map(siteId => {
+      const site = AppData.sites.find(s => s.id === siteId);
+      return site ? site.name : siteId;
+    });
+
+    topBarActions.innerHTML = `
+      <div class="user-site-selector">
+        <select id="active-site-select" class="site-select" onchange="changeActiveSite(this.value)">
+          ${currentUser.sites.map((siteId, idx) => {
+            const site = AppData.sites.find(s => s.id === siteId);
+            return `<option value="${siteId}"${idx === 0 ? ' selected' : ''}>${site ? site.name : siteId}</option>`;
+          }).join('')}
+        </select>
+      </div>
+      <span class="notification-badge">5</span>
+      <div class="user-info" onclick="toggleUserMenu()">
+        <span class="user-name">${currentUser.name}</span>
+        <span class="user-role">${currentUser.role}</span>
+        <span class="user-avatar">${currentUser.name.charAt(0)}</span>
+      </div>
+      <div class="user-menu hidden" id="user-menu">
+        <div class="user-menu-header">
+          <strong>${currentUser.name}</strong>
+          <span>${currentUser.email}</span>
+        </div>
+        <div class="user-menu-item" onclick="navigateTo('users')">My Profile</div>
+        <div class="user-menu-item" onclick="handleLogout()">Sign Out</div>
+      </div>
+    `;
+  }
+}
+
+function toggleUserMenu() {
+  const menu = document.getElementById('user-menu');
+  if (menu) {
+    menu.classList.toggle('hidden');
+  }
+}
+
+function changeActiveSite(siteId) {
+  console.log('Active site changed to:', siteId);
+  // Could trigger re-filtering of data based on selected site
 }
 
 // Navigation
@@ -453,13 +522,48 @@ function getKeyboardHints() {
   return `
     <div class="keyboard-hints">
       <span>Keyboard</span>
-      <span class="kbd">/</span>
-      <span class="kbd">n</span>
-      <span class="kbd">j</span>
-      <span class="kbd">k</span>
-      <span class="kbd">↵</span>
+      <span class="kbd">/</span><span class="kbd-hint">(Search)</span>
+      <span class="kbd">n</span><span class="kbd-hint">(New)</span>
+      <span class="kbd">j</span><span class="kbd-hint">(Down)</span>
+      <span class="kbd">k</span><span class="kbd-hint">(Up)</span>
+      <span class="kbd">↵</span><span class="kbd-hint">(Open)</span>
+      <span class="kbd">Tab</span><span class="kbd-hint">(Next)</span>
+      <span class="kbd">Esc</span><span class="kbd-hint">(Close)</span>
     </div>
   `;
+}
+
+// Financial Year filter options
+function getFinancialYearOptions() {
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth(); // 0-indexed, so March = 2
+
+  // If we're in Jan-Mar, current FY started last year
+  const currentFYStart = currentMonth < 3 ? currentYear - 1 : currentYear;
+
+  // Generate last 5 financial years
+  const years = [];
+  for (let i = 0; i < 5; i++) {
+    const startYear = currentFYStart - i;
+    const endYear = startYear + 1;
+    years.push(`${startYear}-${endYear}`);
+  }
+
+  return `
+    <option value="">Financial Year</option>
+    ${years.map((fy, idx) => `<option value="${fy}"${idx === 0 ? ' selected' : ''}>${fy}</option>`).join('')}
+  `;
+}
+
+// Get financial year from a date string
+function getFinancialYear(dateStr) {
+  const date = new Date(dateStr);
+  const year = date.getFullYear();
+  const month = date.getMonth(); // 0-indexed
+
+  // FY runs Apr-Mar, so Jan-Mar belongs to previous year's FY
+  const fyStart = month < 3 ? year - 1 : year;
+  return `${fyStart}-${fyStart + 1}`;
 }
 
 // ============ DASHBOARD ============
@@ -979,7 +1083,7 @@ function openItemModal(itemId = null) {
       <form id="item-form">
         <div class="form-grid">
           <div class="form-group">
-            <label>SKU *</label>
+            <label>SKU / Part Number</label>
             <input type="text" id="item-sku" value="${item?.sku || ''}" required>
           </div>
           <div class="form-group">
@@ -1192,6 +1296,9 @@ function renderPurchaseOrders() {
 
     <div class="filters-bar">
       <input type="text" class="filter-input" id="po-search" placeholder="Search PO number...">
+      <select class="filter-select" id="po-fy-filter">
+        ${getFinancialYearOptions()}
+      </select>
       <select class="filter-select" id="po-status-filter">
         <option value="">Status</option>
         <option value="Open">Open</option>
@@ -1233,6 +1340,7 @@ function renderPurchaseOrders() {
 function setupPOHandlers() {
   document.getElementById('btn-new-po')?.addEventListener('click', () => openPOModal());
   document.getElementById('po-search')?.addEventListener('input', filterPOs);
+  document.getElementById('po-fy-filter')?.addEventListener('change', filterPOs);
   document.getElementById('po-status-filter')?.addEventListener('change', filterPOs);
   document.getElementById('po-vendor-filter')?.addEventListener('change', filterPOs);
   document.getElementById('po-site-filter')?.addEventListener('change', filterPOs);
@@ -1255,16 +1363,18 @@ function renderPORows(orders) {
 
 function filterPOs() {
   const search = document.getElementById('po-search').value.toLowerCase();
+  const fy = document.getElementById('po-fy-filter').value;
   const status = document.getElementById('po-status-filter').value;
   const vendorId = document.getElementById('po-vendor-filter').value;
   const siteId = document.getElementById('po-site-filter').value;
 
   const filtered = AppData.purchaseOrders.filter(po => {
     const matchesSearch = !search || po.id.toLowerCase().includes(search);
+    const matchesFY = !fy || getFinancialYear(po.date) === fy;
     const matchesStatus = !status || po.status === status;
     const matchesVendor = !vendorId || po.vendorId === vendorId;
     const matchesSite = !siteId || po.siteId === siteId;
-    return matchesSearch && matchesStatus && matchesVendor && matchesSite;
+    return matchesSearch && matchesFY && matchesStatus && matchesVendor && matchesSite;
   });
 
   document.querySelector('#po-table tbody').innerHTML = renderPORows(filtered);
@@ -1318,6 +1428,16 @@ function openPOModal() {
           <textarea id="po-remarks" rows="2" placeholder="Remarks"></textarea>
         </div>
 
+        <div class="item-group-section" style="margin-top: 24px; padding: 16px; background: var(--gray-50); border-radius: 8px; border: 1px dashed var(--gray-300);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <label style="margin: 0; font-weight: 500; white-space: nowrap;">Quick Add Item Group:</label>
+            <select id="po-item-group" onchange="addItemGroupToPO()" style="flex: 1;">
+              <option value="">Select Item Group to auto-add items...</option>
+              ${AppData.itemGroups.map(g => `<option value="${g.id}">${g.name} - ${g.description}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
         <div class="item-lines" style="margin-top: 24px;">
           <div class="item-lines-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
             <h4 style="margin: 0;">Lines</h4>
@@ -1366,22 +1486,56 @@ function openPOModal() {
   modalOverlay.classList.remove('hidden');
 }
 
-function addPOLine() {
+function addPOLine(itemId = '', qty = 1, rate = 0) {
   const tbody = document.getElementById('po-lines');
   const row = document.createElement('tr');
   row.innerHTML = `
     <td>
       <select class="po-item" onchange="updatePOLineTotal(this)" style="width: 100%;">
         <option value="">Item</option>
-        ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}">${i.name}</option>`).join('')}
+        ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}" ${i.id === itemId ? 'selected' : ''}>${i.name}</option>`).join('')}
       </select>
     </td>
-    <td><input type="number" class="po-qty" value="1" min="1" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
-    <td><input type="number" class="po-rate" value="0" min="0" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+    <td><input type="number" class="po-qty" value="${qty}" min="1" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+    <td><input type="number" class="po-rate" value="${rate}" min="0" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
     <td><input type="number" class="po-tax" value="18" min="0" max="100" style="width: 100%;"></td>
     <td style="text-align: center;"><button type="button" class="action-icon delete" onclick="removePOLine(this)">🗑️</button></td>
   `;
   tbody.appendChild(row);
+  updatePOGrandTotal();
+}
+
+function addItemGroupToPO() {
+  const groupSelect = document.getElementById('po-item-group');
+  const groupId = groupSelect.value;
+
+  if (!groupId) return;
+
+  const group = AppData.itemGroups.find(g => g.id === groupId);
+  if (!group) return;
+
+  // Clear existing empty rows (rows with no item selected)
+  const existingRows = document.querySelectorAll('#po-lines tr');
+  existingRows.forEach(row => {
+    const itemSelect = row.querySelector('.po-item');
+    if (itemSelect && !itemSelect.value) {
+      row.remove();
+    }
+  });
+
+  // Add each item from the group
+  group.items.forEach(groupItem => {
+    const item = AppData.items.find(i => i.id === groupItem.itemId);
+    if (item) {
+      addPOLine(groupItem.itemId, groupItem.qty, groupItem.rate);
+    }
+  });
+
+  // Reset the dropdown
+  groupSelect.value = '';
+
+  // Update grand total
+  updatePOGrandTotal();
 }
 
 function removePOLine(btn) {
@@ -1549,7 +1703,7 @@ function renderGoodsReceipt() {
       <div class="page-actions">
         <button class="btn btn-secondary" onclick="location.reload()">Refresh</button>
         <button class="btn btn-secondary">Balances vs PO outstanding</button>
-        <button class="btn btn-primary" id="btn-new-grn">+ Receive against PO</button>
+        <button class="btn btn-primary" id="btn-new-grn">+ Receive against Vendors</button>
       </div>
     </div>
 
@@ -1588,6 +1742,9 @@ function renderGoodsReceipt() {
 
     <div class="filters-bar">
       <input type="text" class="filter-input" id="grn-search" placeholder="Search GRN number...">
+      <select class="filter-select" id="grn-fy-filter">
+        ${getFinancialYearOptions()}
+      </select>
       <select class="filter-select" id="grn-status-filter">
         <option value="">Status</option>
         <option value="Posted">Posted</option>
@@ -1628,6 +1785,7 @@ function renderGoodsReceipt() {
 function setupGRNHandlers() {
   document.getElementById('btn-new-grn')?.addEventListener('click', () => openGRNModal());
   document.getElementById('grn-search')?.addEventListener('input', filterGRNs);
+  document.getElementById('grn-fy-filter')?.addEventListener('change', filterGRNs);
   document.getElementById('grn-status-filter')?.addEventListener('change', filterGRNs);
   document.getElementById('grn-vendor-filter')?.addEventListener('change', filterGRNs);
   document.getElementById('grn-site-filter')?.addEventListener('change', filterGRNs);
@@ -1650,23 +1808,28 @@ function renderGRNRows(receipts) {
 
 function filterGRNs() {
   const search = document.getElementById('grn-search').value.toLowerCase();
+  const fy = document.getElementById('grn-fy-filter').value;
   const status = document.getElementById('grn-status-filter').value;
   const vendorId = document.getElementById('grn-vendor-filter').value;
   const siteId = document.getElementById('grn-site-filter').value;
 
   const filtered = AppData.goodsReceipts.filter(grn => {
     const matchesSearch = !search || grn.id.toLowerCase().includes(search) || grn.poId.toLowerCase().includes(search);
+    const matchesFY = !fy || getFinancialYear(grn.date) === fy;
     const matchesStatus = !status || grn.status === status;
     const matchesVendor = !vendorId || grn.vendorId === vendorId;
     const matchesSite = !siteId || grn.siteId === siteId;
-    return matchesSearch && matchesStatus && matchesVendor && matchesSite;
+    return matchesSearch && matchesFY && matchesStatus && matchesVendor && matchesSite;
   });
 
   document.querySelector('#grn-table tbody').innerHTML = renderGRNRows(filtered);
 }
 
 function openGRNModal() {
+  // Get vendors that have open POs (not completed)
   const openPOs = AppData.purchaseOrders.filter(po => po.status !== 'Completed');
+  const vendorIdsWithOpenPOs = [...new Set(openPOs.map(po => po.vendorId))];
+  const vendorsWithOpenPOs = AppData.vendors.filter(v => vendorIdsWithOpenPOs.includes(v.id));
 
   modalContent.innerHTML = `
     <div class="modal-header">
@@ -1677,10 +1840,16 @@ function openGRNModal() {
       <form id="grn-form">
         <div class="form-grid">
           <div class="form-group full-width">
-            <label>Select Purchase Order *</label>
+            <label>Select Vendor</label>
+            <select id="grn-vendor" required onchange="loadPOsForVendor()">
+              <option value="">Select Vendor...</option>
+              ${vendorsWithOpenPOs.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group full-width hidden" id="grn-po-container">
+            <label>Select Purchase Order</label>
             <select id="grn-po" required onchange="loadPOForGRN()">
-              <option value="">Select PO...</option>
-              ${openPOs.map(po => `<option value="${po.id}">${po.id} - ${po.vendorName} (${po.status})</option>`).join('')}
+              <option value="">Select Purchase Order...</option>
             </select>
           </div>
           <div class="form-group">
@@ -1718,6 +1887,29 @@ function openGRNModal() {
   `;
 
   modalOverlay.classList.remove('hidden');
+}
+
+function loadPOsForVendor() {
+  const vendorId = document.getElementById('grn-vendor').value;
+  const poContainer = document.getElementById('grn-po-container');
+  const poSelect = document.getElementById('grn-po');
+  const linesContainer = document.getElementById('grn-lines-container');
+
+  if (!vendorId) {
+    poContainer.classList.add('hidden');
+    linesContainer.classList.add('hidden');
+    return;
+  }
+
+  const openPOs = AppData.purchaseOrders.filter(po => po.vendorId === vendorId && po.status !== 'Completed');
+
+  poSelect.innerHTML = `
+    <option value="">Select Purchase Order...</option>
+    ${openPOs.map(po => `<option value="${po.id}">${po.id} (${po.status})</option>`).join('')}
+  `;
+
+  poContainer.classList.remove('hidden');
+  linesContainer.classList.add('hidden');
 }
 
 function loadPOForGRN() {
@@ -2313,6 +2505,9 @@ function renderInvoices() {
 
     <div class="filters-bar">
       <input type="text" class="filter-input" id="invoice-search" placeholder="Search invoice / vendor...">
+      <select class="filter-select" id="invoice-fy-filter">
+        ${getFinancialYearOptions()}
+      </select>
       <select class="filter-select" id="invoice-status-filter">
         <option value="">Status</option>
         <option value="open">Open</option>
@@ -2377,12 +2572,14 @@ function renderInvoiceRows(invoices) {
 function setupInvoiceHandlers() {
   document.getElementById('btn-new-invoice')?.addEventListener('click', () => openInvoiceModal());
   document.getElementById('invoice-search')?.addEventListener('input', filterInvoices);
+  document.getElementById('invoice-fy-filter')?.addEventListener('change', filterInvoices);
   document.getElementById('invoice-status-filter')?.addEventListener('change', filterInvoices);
   document.getElementById('invoice-vendor-filter')?.addEventListener('change', filterInvoices);
 }
 
 function filterInvoices() {
   const search = document.getElementById('invoice-search').value.toLowerCase();
+  const fy = document.getElementById('invoice-fy-filter').value;
   const status = document.getElementById('invoice-status-filter').value;
   const vendorId = document.getElementById('invoice-vendor-filter').value;
 
@@ -2390,9 +2587,10 @@ function filterInvoices() {
     const matchesSearch = !search ||
       inv.id.toLowerCase().includes(search) ||
       inv.vendorName.toLowerCase().includes(search);
+    const matchesFY = !fy || getFinancialYear(inv.date) === fy;
     const matchesStatus = !status || inv.status.toLowerCase() === status;
     const matchesVendor = !vendorId || inv.vendorId === vendorId;
-    return matchesSearch && matchesStatus && matchesVendor;
+    return matchesSearch && matchesFY && matchesStatus && matchesVendor;
   });
 
   const tbody = document.querySelector('#invoices-table tbody');
@@ -2617,6 +2815,9 @@ function renderDebitNotes() {
 
     <div class="filters-bar">
       <input type="text" class="filter-input" id="debit-note-search" placeholder="Search debit note / vendor...">
+      <select class="filter-select" id="debit-note-fy-filter">
+        ${getFinancialYearOptions()}
+      </select>
       <select class="filter-select" id="debit-note-status-filter">
         <option value="">Status</option>
         <option value="draft">Draft</option>
@@ -2680,12 +2881,14 @@ function renderDebitNoteRows(debitNotes) {
 function setupDebitNoteHandlers() {
   document.getElementById('btn-new-debit-note')?.addEventListener('click', () => openDebitNoteModal());
   document.getElementById('debit-note-search')?.addEventListener('input', filterDebitNotes);
+  document.getElementById('debit-note-fy-filter')?.addEventListener('change', filterDebitNotes);
   document.getElementById('debit-note-status-filter')?.addEventListener('change', filterDebitNotes);
   document.getElementById('debit-note-vendor-filter')?.addEventListener('change', filterDebitNotes);
 }
 
 function filterDebitNotes() {
   const search = document.getElementById('debit-note-search').value.toLowerCase();
+  const fy = document.getElementById('debit-note-fy-filter').value;
   const status = document.getElementById('debit-note-status-filter').value;
   const vendorId = document.getElementById('debit-note-vendor-filter').value;
 
@@ -2693,9 +2896,10 @@ function filterDebitNotes() {
     const matchesSearch = !search ||
       dn.id.toLowerCase().includes(search) ||
       dn.vendorName.toLowerCase().includes(search);
+    const matchesFY = !fy || getFinancialYear(dn.date) === fy;
     const matchesStatus = !status || dn.status.toLowerCase() === status;
     const matchesVendor = !vendorId || dn.vendorId === vendorId;
-    return matchesSearch && matchesStatus && matchesVendor;
+    return matchesSearch && matchesFY && matchesStatus && matchesVendor;
   });
 
   const tbody = document.querySelector('#debit-notes-table tbody');
