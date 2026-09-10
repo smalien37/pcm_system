@@ -1788,10 +1788,6 @@ function renderPurchaseOrders() {
         <option value="">Vendor</option>
         ${AppData.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
       </select>
-      <select class="filter-select" id="po-site-filter">
-        <option value="">Site</option>
-        ${AppData.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
-      </select>
       <select class="filter-select" id="po-department-filter">
         <option value="">Department</option>
         <option value="Maintenance">Maintenance</option>
@@ -1842,7 +1838,6 @@ function setupPOHandlers() {
   document.getElementById('po-fy-filter')?.addEventListener('change', filterPOs);
   document.getElementById('po-status-filter')?.addEventListener('change', filterPOs);
   document.getElementById('po-vendor-filter')?.addEventListener('change', filterPOs);
-  document.getElementById('po-site-filter')?.addEventListener('change', filterPOs);
   document.getElementById('po-department-filter')?.addEventListener('change', filterPOs);
   document.getElementById('po-section-filter')?.addEventListener('change', filterPOs);
 }
@@ -1873,7 +1868,6 @@ function filterPOs() {
   const fy = document.getElementById('po-fy-filter').value;
   const status = document.getElementById('po-status-filter').value;
   const vendorId = document.getElementById('po-vendor-filter').value;
-  const siteId = document.getElementById('po-site-filter').value;
   const department = document.getElementById('po-department-filter').value;
   const section = document.getElementById('po-section-filter').value;
 
@@ -1882,10 +1876,9 @@ function filterPOs() {
     const matchesFY = !fy || getFinancialYear(po.date) === fy;
     const matchesStatus = !status || po.status === status;
     const matchesVendor = !vendorId || po.vendorId === vendorId;
-    const matchesSite = !siteId || po.siteId === siteId;
     const matchesDepartment = !department || po.department === department;
     const matchesSection = !section || po.section === section;
-    return matchesSearch && matchesFY && matchesStatus && matchesVendor && matchesSite && matchesDepartment && matchesSection;
+    return matchesSearch && matchesFY && matchesStatus && matchesVendor && matchesDepartment && matchesSection;
   });
 
   document.querySelector('#po-table tbody').innerHTML = renderPORows(filtered);
@@ -1909,16 +1902,6 @@ function openPOModal() {
               ${AppData.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
             </select>
           </div>
-          <div class="form-group">
-            <label>Site *</label>
-            <select id="po-site" required>
-              <option value="">Site *</option>
-              ${AppData.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
-            </select>
-          </div>
-        </div>
-
-        <div class="form-grid">
           <div class="form-group">
             <label>Department *</label>
             <select id="po-department" required>
@@ -1956,13 +1939,7 @@ function openPOModal() {
         </div>
 
         <div class="item-lines" style="margin-top: 24px;">
-          <div class="item-lines-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <h4 style="margin: 0;">Lines</h4>
-            <div style="display: flex; gap: 12px;">
-              <button type="button" class="btn btn-sm" style="color: var(--primary); background: none; border: none;" onclick="openOnTheFlyItemModal()">+ On-the-fly item</button>
-              <button type="button" class="btn btn-sm btn-primary" onclick="addPOLine()">+ Add line</button>
-            </div>
-          </div>
+          <h4 style="margin: 0 0 16px 0;">Lines</h4>
           <table class="data-table" style="width: 100%; table-layout: fixed;">
               <thead>
                 <tr>
@@ -2005,8 +1982,14 @@ function openPOModal() {
                 </tr>
               </tbody>
             </table>
-          <div style="text-align: right; margin-top: 12px; font-weight: 600;">
-            Grand Total: <span id="po-grand-total">₹0</span>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+            <div style="display: flex; gap: 12px;">
+              <button type="button" class="btn btn-sm btn-outline" onclick="openOnTheFlyItemModal()">+ On-the-fly item</button>
+              <button type="button" class="btn btn-sm btn-primary" onclick="addPOLine()">+ Add line</button>
+            </div>
+            <div style="font-weight: 600;">
+              Grand Total: <span id="po-grand-total">₹0</span>
+            </div>
           </div>
         </div>
       </form>
@@ -2354,15 +2337,14 @@ function updatePOGrandTotal() {
 
 function savePO(action = 'save') {
   const vendorId = document.getElementById('po-vendor').value;
-  const siteId = document.getElementById('po-site').value;
   const department = document.getElementById('po-department').value;
   const section = document.getElementById('po-section').value;
   const date = document.getElementById('po-date').value;
   const remarks = document.getElementById('po-remarks').value;
   const terms = document.getElementById('po-terms').value;
 
-  if (!vendorId || !siteId) {
-    alert('Please select vendor and site');
+  if (!vendorId) {
+    alert('Please select a vendor');
     return;
   }
 
@@ -2372,7 +2354,6 @@ function savePO(action = 'save') {
   }
 
   const vendor = AppData.vendors.find(v => v.id === vendorId);
-  const site = AppData.sites.find(s => s.id === siteId);
 
   const items = [];
   let total = 0;
@@ -2425,8 +2406,6 @@ function savePO(action = 'save') {
     id: generateId('PO'),
     vendorId,
     vendorName: vendor.name,
-    siteId,
-    siteName: site.name,
     department,
     section,
     date,
