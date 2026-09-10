@@ -566,6 +566,222 @@ function getFinancialYear(dateStr) {
   return `${fyStart}-${fyStart + 1}`;
 }
 
+// Dropdown toggle
+function toggleDropdown(dropdownId) {
+  const dropdown = document.getElementById(dropdownId);
+  const allDropdowns = document.querySelectorAll('.dropdown-menu');
+
+  // Close all other dropdowns
+  allDropdowns.forEach(d => {
+    if (d.id !== dropdownId) d.classList.remove('show');
+  });
+
+  // Toggle current dropdown
+  dropdown.classList.toggle('show');
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.dropdown')) {
+    document.querySelectorAll('.dropdown-menu').forEach(d => d.classList.remove('show'));
+  }
+});
+
+// Export PO to CSV
+function exportPO(type) {
+  let data;
+  if (type === 'current') {
+    // Get currently filtered data from table
+    const rows = document.querySelectorAll('#po-table tbody tr');
+    data = Array.from(rows).map(row => {
+      const cells = row.querySelectorAll('td');
+      return {
+        date: cells[0]?.textContent || '',
+        poNumber: cells[1]?.textContent || '',
+        vendorName: cells[2]?.textContent || '',
+        department: cells[3]?.textContent || '',
+        section: cells[4]?.textContent || '',
+        amount: cells[5]?.textContent || '',
+        status: cells[6]?.textContent || '',
+        createdBy: cells[7]?.textContent || '',
+        approvedBy: cells[8]?.textContent || ''
+      };
+    });
+  } else {
+    // Export all data
+    data = AppData.purchaseOrders.map(po => ({
+      date: formatDate(po.date),
+      poNumber: po.id,
+      vendorName: po.vendorName,
+      department: po.department || '-',
+      section: po.section || '-',
+      amount: `₹${formatCurrency(po.total)}`,
+      status: po.status,
+      createdBy: po.createdBy || 'Admin',
+      approvedBy: po.approvedBy || '-'
+    }));
+  }
+
+  downloadCSV(data, 'purchase_orders.csv', ['Date', 'PO Number', 'Vendor Name', 'Department', 'Section', 'Amount', 'Status', 'Created By', 'Approved By']);
+  toggleDropdown('po-export-dropdown');
+}
+
+// Export GRN to CSV
+function exportGRN(type) {
+  let data;
+  if (type === 'current') {
+    // Get currently filtered data from table
+    const rows = document.querySelectorAll('#grn-table tbody tr');
+    data = Array.from(rows).map(row => {
+      const cells = row.querySelectorAll('td');
+      return {
+        date: cells[0]?.textContent || '',
+        grnNo: cells[1]?.textContent || '',
+        poNo: cells[2]?.textContent || '',
+        challanNo: cells[3]?.textContent || '',
+        vendorName: cells[4]?.textContent || '',
+        amount: cells[5]?.textContent || '',
+        godown: cells[6]?.textContent || '',
+        department: cells[7]?.textContent || '',
+        section: cells[8]?.textContent || '',
+        createdBy: cells[9]?.textContent || ''
+      };
+    });
+  } else {
+    // Export all data
+    data = AppData.goodsReceipts.map(grn => {
+      const poIds = [...new Set(grn.items?.map(i => i.poId) || [grn.poId])].filter(Boolean).join(', ');
+      return {
+        date: formatDate(grn.date),
+        grnNo: grn.id,
+        poNo: poIds || '-',
+        challanNo: grn.challanNo || '-',
+        vendorName: grn.vendorName,
+        amount: `₹${formatCurrency(grn.total || 0)}`,
+        godown: grn.godown || '-',
+        department: grn.department || '-',
+        section: grn.section || '-',
+        createdBy: grn.createdBy || 'Admin'
+      };
+    });
+  }
+
+  downloadCSV(data, 'goods_receipts.csv', ['Date', 'GRN No', 'PO No', 'Challan No', 'Vendor Name', 'Amount', 'Godown', 'Department', 'Section', 'Created By']);
+  toggleDropdown('grn-export-dropdown');
+}
+
+// Download CSV helper
+function downloadCSV(data, filename, headers) {
+  if (data.length === 0) {
+    alert('No data to export');
+    return;
+  }
+
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row => Object.values(row).map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+  ].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+// PO Summary Cards
+function getPOSummaryCards(orders) {
+  const totalAmount = orders.reduce((sum, po) => sum + (po.total || 0), 0);
+
+  // Outstanding = Total of non-completed POs
+  const outstandingAmount = orders
+    .filter(po => po.status !== 'Completed')
+    .reduce((sum, po) => sum + (po.total || 0), 0);
+
+  // Tax = Sum of all tax amounts from items
+  const taxAmount = orders.reduce((sum, po) => {
+    const poTax = (po.items || []).reduce((itemSum, item) => {
+      const taxable = item.taxableAmount || (item.qty * item.rate * (1 - (item.disc || 0) / 100));
+      const cgst = taxable * ((item.cgst || 0) / 100);
+      const sgst = taxable * ((item.sgst || 0) / 100);
+      const igst = taxable * ((item.igst || 0) / 100);
+      return itemSum + cgst + sgst + igst;
+    }, 0);
+    return sum + poTax;
+  }, 0);
+
+  return `
+    <div class="summary-card">
+      <div class="summary-card-icon" style="background: #dbeafe; color: #2563eb;">📋</div>
+      <div class="summary-card-content">
+        <div class="summary-card-label">Total Recorded PO Amount</div>
+        <div class="summary-card-value">₹${formatCurrency(totalAmount)}</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card-icon" style="background: #fef3c7; color: #d97706;">⏳</div>
+      <div class="summary-card-content">
+        <div class="summary-card-label">Total Outstanding Payment</div>
+        <div class="summary-card-value">₹${formatCurrency(outstandingAmount)}</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card-icon" style="background: #d1fae5; color: #059669;">💰</div>
+      <div class="summary-card-content">
+        <div class="summary-card-label">Tax Paid to Seller</div>
+        <div class="summary-card-value">₹${formatCurrency(taxAmount)}</div>
+      </div>
+    </div>
+  `;
+}
+
+// GRN Summary Cards
+function getGRNSummaryCards(receipts) {
+  const totalAmount = receipts.reduce((sum, grn) => sum + (grn.total || 0), 0);
+
+  // Total items received
+  const totalItems = receipts.reduce((sum, grn) => {
+    return sum + (grn.items || []).reduce((itemSum, item) => itemSum + (item.qty || 0), 0);
+  }, 0);
+
+  // Tax = Sum of all tax amounts from items
+  const taxAmount = receipts.reduce((sum, grn) => {
+    const grnTax = (grn.items || []).reduce((itemSum, item) => {
+      const taxable = item.taxableAmount || (item.qty * item.rate * (1 - (item.disc || 0) / 100));
+      const cgst = taxable * ((item.cgst || 0) / 100);
+      const sgst = taxable * ((item.sgst || 0) / 100);
+      const igst = taxable * ((item.igst || 0) / 100);
+      return itemSum + cgst + sgst + igst;
+    }, 0);
+    return sum + grnTax;
+  }, 0);
+
+  return `
+    <div class="summary-card">
+      <div class="summary-card-icon" style="background: #dbeafe; color: #2563eb;">📥</div>
+      <div class="summary-card-content">
+        <div class="summary-card-label">Total Received Amount</div>
+        <div class="summary-card-value">₹${formatCurrency(totalAmount)}</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card-icon" style="background: #e0e7ff; color: #4f46e5;">📦</div>
+      <div class="summary-card-content">
+        <div class="summary-card-label">Total Items Received</div>
+        <div class="summary-card-value">${totalItems.toLocaleString()}</div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card-icon" style="background: #d1fae5; color: #059669;">💰</div>
+      <div class="summary-card-content">
+        <div class="summary-card-label">Tax on Received Goods</div>
+        <div class="summary-card-value">₹${formatCurrency(taxAmount)}</div>
+      </div>
+    </div>
+  `;
+}
+
 // ============ DASHBOARD ============
 function renderDashboard() {
   const totalPOs = AppData.purchaseOrders.length;
@@ -1511,6 +1727,15 @@ function renderPurchaseOrders() {
       </div>
       <div class="page-actions">
         <button class="btn btn-secondary" onclick="location.reload()">Refresh</button>
+        <div class="dropdown">
+          <button class="btn btn-secondary dropdown-toggle" onclick="toggleDropdown('po-export-dropdown')">
+            Export <span class="dropdown-arrow">▼</span>
+          </button>
+          <div class="dropdown-menu" id="po-export-dropdown">
+            <a href="#" class="dropdown-item" onclick="exportPO('current'); return false;">Export Current Page</a>
+            <a href="#" class="dropdown-item" onclick="exportPO('all'); return false;">Export All</a>
+          </div>
+        </div>
         <button class="btn btn-primary" id="btn-new-po">+ New PO</button>
       </div>
     </div>
@@ -1547,13 +1772,14 @@ function renderPurchaseOrders() {
       </div>
     </div>
 
-    <div class="filters-bar">
+    <div class="filters-bar" style="flex-wrap: wrap; gap: 8px;">
       <input type="text" class="filter-input" id="po-search" placeholder="Search PO number...">
       <select class="filter-select" id="po-fy-filter">
         ${getFinancialYearOptions()}
       </select>
       <select class="filter-select" id="po-status-filter">
         <option value="">Status</option>
+        <option value="Draft">Draft</option>
         <option value="Open">Open</option>
         <option value="Partially Received">Partially Received</option>
         <option value="Completed">Completed</option>
@@ -1566,20 +1792,40 @@ function renderPurchaseOrders() {
         <option value="">Site</option>
         ${AppData.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
       </select>
+      <select class="filter-select" id="po-department-filter">
+        <option value="">Department</option>
+        <option value="Maintenance">Maintenance</option>
+        <option value="Production">Production</option>
+        <option value="HR">HR</option>
+      </select>
+      <select class="filter-select" id="po-section-filter">
+        <option value="">Section</option>
+        <option value="Tipper">Tipper</option>
+        <option value="Excavator">Excavator</option>
+        <option value="Loader">Loader</option>
+      </select>
+    </div>
+
+    <div class="summary-cards" id="po-summary-cards">
+      ${getPOSummaryCards(AppData.purchaseOrders)}
     </div>
 
     ${getKeyboardHints()}
 
-    <div class="card">
+    <div class="card" style="overflow-x: auto;">
       <table class="data-table" id="po-table">
         <thead>
           <tr>
+            <th>Date</th>
             <th>PO Number</th>
-            <th>Vendor</th>
-            <th>Site</th>
+            <th>Vendor Name</th>
+            <th>Department</th>
+            <th>Section</th>
+            <th>Amount</th>
             <th>Status</th>
-            <th>Total</th>
-            <th></th>
+            <th>Created By</th>
+            <th>Approved By</th>
+            <th>View & Action</th>
           </tr>
         </thead>
         <tbody>
@@ -1597,18 +1843,26 @@ function setupPOHandlers() {
   document.getElementById('po-status-filter')?.addEventListener('change', filterPOs);
   document.getElementById('po-vendor-filter')?.addEventListener('change', filterPOs);
   document.getElementById('po-site-filter')?.addEventListener('change', filterPOs);
+  document.getElementById('po-department-filter')?.addEventListener('change', filterPOs);
+  document.getElementById('po-section-filter')?.addEventListener('change', filterPOs);
 }
 
 function renderPORows(orders) {
   return orders.map(po => `
     <tr>
+      <td>${formatDate(po.date)}</td>
       <td><strong>${po.id}</strong></td>
       <td>${po.vendorName}</td>
-      <td>${po.siteName}</td>
-      <td><span class="badge ${getStatusBadgeClass(po.status)}">${po.status}</span></td>
+      <td>${po.department || '-'}</td>
+      <td>${po.section || '-'}</td>
       <td>₹${formatCurrency(po.total)}</td>
+      <td><span class="badge ${getStatusBadgeClass(po.status)}">${po.status}</span></td>
+      <td>${po.createdBy || 'Admin'}</td>
+      <td>${po.approvedBy || '-'}</td>
       <td class="action-icons">
         <button class="action-icon" onclick="viewPO('${po.id}')" title="View">👁️</button>
+        ${po.status === 'Draft' ? `<button class="action-icon" onclick="editPO('${po.id}')" title="Edit">✏️</button>` : ''}
+        ${po.status === 'Draft' || po.status === 'Open' ? `<button class="action-icon" onclick="approvePO('${po.id}')" title="Approve">✅</button>` : ''}
       </td>
     </tr>
   `).join('');
@@ -1620,17 +1874,22 @@ function filterPOs() {
   const status = document.getElementById('po-status-filter').value;
   const vendorId = document.getElementById('po-vendor-filter').value;
   const siteId = document.getElementById('po-site-filter').value;
+  const department = document.getElementById('po-department-filter').value;
+  const section = document.getElementById('po-section-filter').value;
 
   const filtered = AppData.purchaseOrders.filter(po => {
-    const matchesSearch = !search || po.id.toLowerCase().includes(search);
+    const matchesSearch = !search || po.id.toLowerCase().includes(search) || po.vendorName?.toLowerCase().includes(search);
     const matchesFY = !fy || getFinancialYear(po.date) === fy;
     const matchesStatus = !status || po.status === status;
     const matchesVendor = !vendorId || po.vendorId === vendorId;
     const matchesSite = !siteId || po.siteId === siteId;
-    return matchesSearch && matchesFY && matchesStatus && matchesVendor && matchesSite;
+    const matchesDepartment = !department || po.department === department;
+    const matchesSection = !section || po.section === section;
+    return matchesSearch && matchesFY && matchesStatus && matchesVendor && matchesSite && matchesDepartment && matchesSection;
   });
 
   document.querySelector('#po-table tbody').innerHTML = renderPORows(filtered);
+  document.getElementById('po-summary-cards').innerHTML = getPOSummaryCards(filtered);
 }
 
 function openPOModal() {
@@ -1659,16 +1918,25 @@ function openPOModal() {
           </div>
         </div>
 
-        <div class="form-group">
-          <label>Cost centre (optional)</label>
-          <select id="po-cost-centre">
-            <option value="">Cost centre (optional)</option>
-            <option value="PROJ-A">Project Alpha</option>
-            <option value="PROJ-B">Project Beta</option>
-            <option value="MAINT">Maintenance</option>
-            <option value="ADMIN">Administration</option>
-          </select>
-          <p style="font-size: 12px; color: var(--gray-500); margin-top: 4px;">Links this PO to a budget; spend is checked against the FY budget on submit</p>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Department *</label>
+            <select id="po-department" required>
+              <option value="">Select Department</option>
+              <option value="Maintenance">Maintenance</option>
+              <option value="Production">Production</option>
+              <option value="HR">HR</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Section *</label>
+            <select id="po-section" required>
+              <option value="">Select Section</option>
+              <option value="Tipper">Tipper</option>
+              <option value="Excavator">Excavator</option>
+              <option value="Loader">Loader</option>
+            </select>
+          </div>
         </div>
 
         <div class="form-grid">
@@ -1682,6 +1950,11 @@ function openPOModal() {
           </div>
         </div>
 
+        <div class="form-group">
+          <label>Terms & Conditions</label>
+          <textarea id="po-terms" rows="3" placeholder="Enter terms and conditions"></textarea>
+        </div>
+
         <div class="item-lines" style="margin-top: 24px;">
           <div class="item-lines-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
             <h4 style="margin: 0;">Lines</h4>
@@ -1690,31 +1963,48 @@ function openPOModal() {
               <button type="button" class="btn btn-sm btn-primary" onclick="addPOLine()">+ Add line</button>
             </div>
           </div>
-          <table class="data-table" style="table-layout: fixed;">
-            <thead>
-              <tr>
-                <th style="width: 45%;">Item</th>
-                <th style="width: 12%;">Qty</th>
-                <th style="width: 18%;">Price</th>
-                <th style="width: 12%;">Tax %</th>
-                <th style="width: 13%;"></th>
-              </tr>
-            </thead>
-            <tbody id="po-lines">
-              <tr>
-                <td>
-                  <select class="po-item" onchange="updatePOLineTotal(this)" style="width: 100%;">
-                    <option value="">Item</option>
-                    ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}">${i.name}</option>`).join('')}
-                  </select>
-                </td>
-                <td><input type="number" class="po-qty" value="1" min="1" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
-                <td><input type="number" class="po-rate" value="0" min="0" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
-                <td><input type="number" class="po-tax" value="18" min="0" max="100" style="width: 100%;"></td>
-                <td style="text-align: center;"><button type="button" class="action-icon delete" onclick="removePOLine(this)">🗑️</button></td>
-              </tr>
-            </tbody>
-          </table>
+          <table class="data-table" style="width: 100%; table-layout: fixed;">
+              <thead>
+                <tr>
+                  <th style="width: 5%;">Sl No</th>
+                  <th style="width: 22%;">Description of Goods</th>
+                  <th style="width: 6%;">UOM</th>
+                  <th style="width: 8%;">Qty</th>
+                  <th style="width: 9%;">Rate</th>
+                  <th style="width: 7%;">Disc %</th>
+                  <th style="width: 10%;">Taxable Amt</th>
+                  <th style="width: 7%;">CGST %</th>
+                  <th style="width: 7%;">SGST %</th>
+                  <th style="width: 7%;">IGST %</th>
+                  <th style="width: 9%;">Total Amt</th>
+                  <th style="width: 6%;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="po-lines">
+                <tr>
+                  <td class="po-sl-no">1</td>
+                  <td>
+                    <select class="po-item" onchange="updatePOLineTotal(this)" style="width: 100%;">
+                      <option value="">Select Item</option>
+                      ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}" data-uom="${i.uom || 'NOS'}">${i.name}</option>`).join('')}
+                    </select>
+                  </td>
+                  <td class="po-uom">-</td>
+                  <td><input type="number" class="po-qty" value="1" min="1" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+                  <td><input type="number" class="po-rate" value="0" min="0" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+                  <td><input type="number" class="po-disc" value="0" min="0" max="100" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+                  <td class="po-taxable-amt">₹0</td>
+                  <td><input type="number" class="po-cgst" value="9" min="0" max="100" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+                  <td><input type="number" class="po-sgst" value="9" min="0" max="100" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+                  <td><input type="number" class="po-igst" value="0" min="0" max="100" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+                  <td class="po-line-total">₹0</td>
+                  <td style="text-align: center;">
+                    <button type="button" class="action-icon" onclick="editPOLine(this)" title="Edit">✏️</button>
+                    <button type="button" class="action-icon delete" onclick="removePOLine(this)" title="Delete">🗑️</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           <div style="text-align: right; margin-top: 12px; font-weight: 600;">
             Grand Total: <span id="po-grand-total">₹0</span>
           </div>
@@ -1723,7 +2013,8 @@ function openPOModal() {
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="savePO()">Create draft</button>
+      <button class="btn btn-outline" onclick="savePO('draft')">Save as Draft</button>
+      <button class="btn btn-primary" onclick="savePO('save')">Save Changes</button>
     </div>
   `;
 
@@ -1797,20 +2088,34 @@ function addSubGroupItemsToPO() {
 
 function addPOLine(itemId = '', qty = 1, rate = 0) {
   const tbody = document.getElementById('po-lines');
+  const slNo = tbody.querySelectorAll('tr').length + 1;
+  const item = itemId ? AppData.items.find(i => i.id === itemId) : null;
+  const uom = item?.uom || '-';
   const row = document.createElement('tr');
   row.innerHTML = `
+    <td class="po-sl-no">${slNo}</td>
     <td>
       <select class="po-item" onchange="updatePOLineTotal(this)" style="width: 100%;">
-        <option value="">Item</option>
-        ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}" ${i.id === itemId ? 'selected' : ''}>${i.name}</option>`).join('')}
+        <option value="">Select Item</option>
+        ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}" data-uom="${i.uom || 'NOS'}" ${i.id === itemId ? 'selected' : ''}>${i.name}</option>`).join('')}
       </select>
     </td>
+    <td class="po-uom">${uom}</td>
     <td><input type="number" class="po-qty" value="${qty}" min="1" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
     <td><input type="number" class="po-rate" value="${rate}" min="0" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
-    <td><input type="number" class="po-tax" value="18" min="0" max="100" style="width: 100%;"></td>
-    <td style="text-align: center;"><button type="button" class="action-icon delete" onclick="removePOLine(this)">🗑️</button></td>
+    <td><input type="number" class="po-disc" value="0" min="0" max="100" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+    <td class="po-taxable-amt">₹0</td>
+    <td><input type="number" class="po-cgst" value="9" min="0" max="100" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+    <td><input type="number" class="po-sgst" value="9" min="0" max="100" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+    <td><input type="number" class="po-igst" value="0" min="0" max="100" onchange="updatePOLineTotal(this)" style="width: 100%;"></td>
+    <td class="po-line-total">₹0</td>
+    <td style="text-align: center;">
+      <button type="button" class="action-icon" onclick="editPOLine(this)" title="Edit">✏️</button>
+      <button type="button" class="action-icon delete" onclick="removePOLine(this)" title="Delete">🗑️</button>
+    </td>
   `;
   tbody.appendChild(row);
+  updatePOLineTotal(row.querySelector('.po-item'));
   updatePOGrandTotal();
 }
 
@@ -1976,17 +2281,54 @@ function removePOLine(btn) {
   const row = btn.closest('tr');
   if (document.querySelectorAll('#po-lines tr').length > 1) {
     row.remove();
+    renumberPOLines();
     updatePOGrandTotal();
   }
 }
 
+function renumberPOLines() {
+  document.querySelectorAll('#po-lines tr').forEach((row, index) => {
+    row.querySelector('.po-sl-no').textContent = index + 1;
+  });
+}
+
 function updatePOLineTotal(el) {
   const row = el.closest('tr');
+  const itemSelect = row.querySelector('.po-item');
+  const selectedOption = itemSelect.options[itemSelect.selectedIndex];
+
+  if (selectedOption && selectedOption.value) {
+    row.querySelector('.po-uom').textContent = selectedOption.dataset.uom || '-';
+  }
+
   const qty = parseInt(row.querySelector('.po-qty').value) || 0;
   const rate = parseFloat(row.querySelector('.po-rate').value) || 0;
-  const total = qty * rate;
-  row.querySelector('.po-line-total').textContent = `₹${formatCurrency(total)}`;
+  const disc = parseFloat(row.querySelector('.po-disc').value) || 0;
+  const cgst = parseFloat(row.querySelector('.po-cgst').value) || 0;
+  const sgst = parseFloat(row.querySelector('.po-sgst').value) || 0;
+  const igst = parseFloat(row.querySelector('.po-igst').value) || 0;
+
+  const grossAmount = qty * rate;
+  const discountAmount = grossAmount * (disc / 100);
+  const taxableAmount = grossAmount - discountAmount;
+  const cgstAmount = taxableAmount * (cgst / 100);
+  const sgstAmount = taxableAmount * (sgst / 100);
+  const igstAmount = taxableAmount * (igst / 100);
+  const totalAmount = taxableAmount + cgstAmount + sgstAmount + igstAmount;
+
+  row.querySelector('.po-taxable-amt').textContent = `₹${formatCurrency(taxableAmount)}`;
+  row.querySelector('.po-line-total').textContent = `₹${formatCurrency(totalAmount)}`;
   updatePOGrandTotal();
+}
+
+function editPOLine(btn) {
+  const row = btn.closest('tr');
+  const inputs = row.querySelectorAll('input, select');
+  inputs.forEach(input => {
+    input.disabled = !input.disabled;
+  });
+  btn.textContent = inputs[0].disabled ? '✏️' : '✅';
+  btn.title = inputs[0].disabled ? 'Edit' : 'Done';
 }
 
 function updatePOGrandTotal() {
@@ -1994,18 +2336,38 @@ function updatePOGrandTotal() {
   document.querySelectorAll('#po-lines tr').forEach(row => {
     const qty = parseInt(row.querySelector('.po-qty').value) || 0;
     const rate = parseFloat(row.querySelector('.po-rate').value) || 0;
-    total += qty * rate;
+    const disc = parseFloat(row.querySelector('.po-disc').value) || 0;
+    const cgst = parseFloat(row.querySelector('.po-cgst').value) || 0;
+    const sgst = parseFloat(row.querySelector('.po-sgst').value) || 0;
+    const igst = parseFloat(row.querySelector('.po-igst').value) || 0;
+
+    const grossAmount = qty * rate;
+    const discountAmount = grossAmount * (disc / 100);
+    const taxableAmount = grossAmount - discountAmount;
+    const cgstAmount = taxableAmount * (cgst / 100);
+    const sgstAmount = taxableAmount * (sgst / 100);
+    const igstAmount = taxableAmount * (igst / 100);
+    total += taxableAmount + cgstAmount + sgstAmount + igstAmount;
   });
   document.getElementById('po-grand-total').textContent = `₹${formatCurrency(total)}`;
 }
 
-function savePO() {
+function savePO(action = 'save') {
   const vendorId = document.getElementById('po-vendor').value;
   const siteId = document.getElementById('po-site').value;
+  const department = document.getElementById('po-department').value;
+  const section = document.getElementById('po-section').value;
   const date = document.getElementById('po-date').value;
+  const remarks = document.getElementById('po-remarks').value;
+  const terms = document.getElementById('po-terms').value;
 
   if (!vendorId || !siteId) {
     alert('Please select vendor and site');
+    return;
+  }
+
+  if (!department || !section) {
+    alert('Please select department and section');
     return;
   }
 
@@ -2020,14 +2382,33 @@ function savePO() {
     const itemId = itemSelect.value;
     if (itemId) {
       const itemName = itemSelect.options[itemSelect.selectedIndex].dataset.name;
+      const uom = row.querySelector('.po-uom').textContent;
       const qty = parseInt(row.querySelector('.po-qty').value) || 0;
       const rate = parseFloat(row.querySelector('.po-rate').value) || 0;
-      const lineTotal = qty * rate;
+      const disc = parseFloat(row.querySelector('.po-disc').value) || 0;
+      const cgst = parseFloat(row.querySelector('.po-cgst').value) || 0;
+      const sgst = parseFloat(row.querySelector('.po-sgst').value) || 0;
+      const igst = parseFloat(row.querySelector('.po-igst').value) || 0;
+
+      const grossAmount = qty * rate;
+      const discountAmount = grossAmount * (disc / 100);
+      const taxableAmount = grossAmount - discountAmount;
+      const cgstAmount = taxableAmount * (cgst / 100);
+      const sgstAmount = taxableAmount * (sgst / 100);
+      const igstAmount = taxableAmount * (igst / 100);
+      const lineTotal = taxableAmount + cgstAmount + sgstAmount + igstAmount;
+
       items.push({
         itemId,
         name: itemName,
+        uom,
         qty,
         rate,
+        disc,
+        taxableAmount,
+        cgst,
+        sgst,
+        igst,
         total: lineTotal,
         received: 0
       });
@@ -2046,8 +2427,12 @@ function savePO() {
     vendorName: vendor.name,
     siteId,
     siteName: site.name,
+    department,
+    section,
     date,
-    status: 'Open',
+    remarks,
+    terms,
+    status: action === 'draft' ? 'Draft' : 'Open',
     items,
     total
   };
@@ -2055,6 +2440,28 @@ function savePO() {
   AppData.purchaseOrders.unshift(newPO);
   closeModal();
   renderPage('purchase-orders');
+}
+
+function editPO(poId) {
+  const po = AppData.purchaseOrders.find(p => p.id === poId);
+  if (!po || po.status !== 'Draft') {
+    alert('Only draft POs can be edited');
+    return;
+  }
+  // For now, show a message - full edit would require loading PO data into the modal
+  alert('Edit functionality for PO ' + poId + ' - This would open the PO form with existing data for editing.');
+}
+
+function approvePO(poId) {
+  const po = AppData.purchaseOrders.find(p => p.id === poId);
+  if (!po) return;
+
+  if (confirm(`Approve PO ${poId}?`)) {
+    po.status = 'Open';
+    po.approvedBy = 'Admin';
+    po.approvedDate = new Date().toISOString().split('T')[0];
+    renderPage('purchase-orders');
+  }
 }
 
 function viewPO(poId) {
@@ -2137,6 +2544,15 @@ function renderGoodsReceipt() {
       <div class="page-actions">
         <button class="btn btn-secondary" onclick="location.reload()">Refresh</button>
         <button class="btn btn-secondary" onclick="openPOOutstandingModal()">Balances vs PO Outstanding</button>
+        <div class="dropdown">
+          <button class="btn btn-secondary dropdown-toggle" onclick="toggleDropdown('grn-export-dropdown')">
+            Export <span class="dropdown-arrow">▼</span>
+          </button>
+          <div class="dropdown-menu" id="grn-export-dropdown">
+            <a href="#" class="dropdown-item" onclick="exportGRN('current'); return false;">Export Current Page</a>
+            <a href="#" class="dropdown-item" onclick="exportGRN('all'); return false;">Export All</a>
+          </div>
+        </div>
         <button class="btn btn-primary" id="btn-new-grn">+ Receive against Vendors</button>
       </div>
     </div>
@@ -2174,8 +2590,8 @@ function renderGoodsReceipt() {
       </div>
     </div>
 
-    <div class="filters-bar">
-      <input type="text" class="filter-input" id="grn-search" placeholder="Search GRN number...">
+    <div class="filters-bar" style="flex-wrap: wrap; gap: 8px;">
+      <input type="text" class="filter-input" id="grn-search" placeholder="Search GRN / PO / Challan...">
       <select class="filter-select" id="grn-fy-filter">
         ${getFinancialYearOptions()}
       </select>
@@ -2188,24 +2604,48 @@ function renderGoodsReceipt() {
         <option value="">Vendor</option>
         ${AppData.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
       </select>
-      <select class="filter-select" id="grn-site-filter">
-        <option value="">Site</option>
-        ${AppData.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+      <select class="filter-select" id="grn-godown-filter">
+        <option value="">Godown</option>
+        <option value="Godown A">Godown A</option>
+        <option value="Godown B">Godown B</option>
+        <option value="Godown C">Godown C</option>
+        <option value="Godown D">Godown D</option>
       </select>
+      <select class="filter-select" id="grn-department-filter">
+        <option value="">Department</option>
+        <option value="Maintenance">Maintenance</option>
+        <option value="Production">Production</option>
+        <option value="HR">HR</option>
+      </select>
+      <select class="filter-select" id="grn-section-filter">
+        <option value="">Section</option>
+        <option value="Tipper">Tipper</option>
+        <option value="Excavator">Excavator</option>
+        <option value="Loader">Loader</option>
+      </select>
+    </div>
+
+    <div class="summary-cards" id="grn-summary-cards">
+      ${getGRNSummaryCards(AppData.goodsReceipts)}
     </div>
 
     ${getKeyboardHints()}
 
-    <div class="card">
+    <div class="card" style="overflow-x: auto;">
       <table class="data-table" id="grn-table">
         <thead>
           <tr>
-            <th>GRN</th>
-            <th>PO</th>
-            <th>Vendor</th>
-            <th>Site</th>
-            <th>Status</th>
-            <th></th>
+            <th>Date</th>
+            <th>GRN No</th>
+            <th>PO No</th>
+            <th>Challan No</th>
+            <th>Vendor Name</th>
+            <th>Amount</th>
+            <th>Godown</th>
+            <th>Department</th>
+            <th>Section</th>
+            <th>Created By</th>
+            <th>View & Action</th>
           </tr>
         </thead>
         <tbody>
@@ -2222,22 +2662,34 @@ function setupGRNHandlers() {
   document.getElementById('grn-fy-filter')?.addEventListener('change', filterGRNs);
   document.getElementById('grn-status-filter')?.addEventListener('change', filterGRNs);
   document.getElementById('grn-vendor-filter')?.addEventListener('change', filterGRNs);
-  document.getElementById('grn-site-filter')?.addEventListener('change', filterGRNs);
+  document.getElementById('grn-godown-filter')?.addEventListener('change', filterGRNs);
+  document.getElementById('grn-department-filter')?.addEventListener('change', filterGRNs);
+  document.getElementById('grn-section-filter')?.addEventListener('change', filterGRNs);
 }
 
 function renderGRNRows(receipts) {
-  return receipts.map(grn => `
+  return receipts.map(grn => {
+    // Get unique PO IDs from items
+    const poIds = [...new Set(grn.items?.map(i => i.poId) || [grn.poId])].filter(Boolean).join(', ');
+    return `
     <tr>
+      <td>${formatDate(grn.date)}</td>
       <td><strong>${grn.id}</strong></td>
-      <td>${grn.poId}</td>
+      <td>${poIds || '-'}</td>
+      <td>${grn.challanNo || '-'}</td>
       <td>${grn.vendorName}</td>
-      <td>${grn.siteName}</td>
-      <td><span class="badge ${getStatusBadgeClass(grn.status)}">${grn.status}</span></td>
+      <td>₹${formatCurrency(grn.total || 0)}</td>
+      <td>${grn.godown || '-'}</td>
+      <td>${grn.department || '-'}</td>
+      <td>${grn.section || '-'}</td>
+      <td>${grn.createdBy || 'Admin'}</td>
       <td class="action-icons">
         <button class="action-icon" onclick="viewGRN('${grn.id}')" title="View">👁️</button>
+        ${grn.status === 'Draft' ? `<button class="action-icon" onclick="editGRN('${grn.id}')" title="Edit">✏️</button>` : ''}
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function filterGRNs() {
@@ -2245,18 +2697,28 @@ function filterGRNs() {
   const fy = document.getElementById('grn-fy-filter').value;
   const status = document.getElementById('grn-status-filter').value;
   const vendorId = document.getElementById('grn-vendor-filter').value;
-  const siteId = document.getElementById('grn-site-filter').value;
+  const godown = document.getElementById('grn-godown-filter').value;
+  const department = document.getElementById('grn-department-filter').value;
+  const section = document.getElementById('grn-section-filter').value;
 
   const filtered = AppData.goodsReceipts.filter(grn => {
-    const matchesSearch = !search || grn.id.toLowerCase().includes(search) || grn.poId.toLowerCase().includes(search);
+    const poIds = grn.items?.map(i => i.poId).join(' ') || grn.poId || '';
+    const matchesSearch = !search ||
+      grn.id.toLowerCase().includes(search) ||
+      poIds.toLowerCase().includes(search) ||
+      (grn.challanNo || '').toLowerCase().includes(search) ||
+      (grn.vendorName || '').toLowerCase().includes(search);
     const matchesFY = !fy || getFinancialYear(grn.date) === fy;
     const matchesStatus = !status || grn.status === status;
     const matchesVendor = !vendorId || grn.vendorId === vendorId;
-    const matchesSite = !siteId || grn.siteId === siteId;
-    return matchesSearch && matchesFY && matchesStatus && matchesVendor && matchesSite;
+    const matchesGodown = !godown || grn.godown === godown;
+    const matchesDepartment = !department || grn.department === department;
+    const matchesSection = !section || grn.section === section;
+    return matchesSearch && matchesFY && matchesStatus && matchesVendor && matchesGodown && matchesDepartment && matchesSection;
   });
 
   document.querySelector('#grn-table tbody').innerHTML = renderGRNRows(filtered);
+  document.getElementById('grn-summary-cards').innerHTML = getGRNSummaryCards(filtered);
 }
 
 function openGRNModal() {
@@ -2265,6 +2727,7 @@ function openGRNModal() {
   const vendorIdsWithOpenPOs = [...new Set(openPOs.map(po => po.vendorId))];
   const vendorsWithOpenPOs = AppData.vendors.filter(v => vendorIdsWithOpenPOs.includes(v.id));
 
+  modalContent.classList.add('modal-wide');
   modalContent.innerHTML = `
     <div class="modal-header">
       <h2>New Goods Receipt</h2>
@@ -2273,18 +2736,44 @@ function openGRNModal() {
     <div class="modal-body">
       <form id="grn-form">
         <div class="form-grid">
-          <div class="form-group full-width">
-            <label>Select Vendor</label>
+          <div class="form-group">
+            <label>Select Vendor *</label>
             <select id="grn-vendor" required onchange="loadItemsForVendor()">
               <option value="">Select Vendor...</option>
               ${vendorsWithOpenPOs.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
             </select>
           </div>
-          <div class="form-group full-width hidden" id="grn-items-container">
-            <label>Select Items to Receive (multiple)</label>
-            <div id="grn-items-checklist" class="items-checklist">
-            </div>
+          <div class="form-group">
+            <label>Department *</label>
+            <select id="grn-department" required>
+              <option value="">Select Department</option>
+              <option value="Maintenance">Maintenance</option>
+              <option value="Production">Production</option>
+              <option value="HR">HR</option>
+            </select>
           </div>
+          <div class="form-group">
+            <label>Section *</label>
+            <select id="grn-section" required>
+              <option value="">Select Section</option>
+              <option value="Tipper">Tipper</option>
+              <option value="Excavator">Excavator</option>
+              <option value="Loader">Loader</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Godown *</label>
+            <select id="grn-godown" required>
+              <option value="">Select Godown</option>
+              <option value="Godown A">Godown A</option>
+              <option value="Godown B">Godown B</option>
+              <option value="Godown C">Godown C</option>
+              <option value="Godown D">Godown D</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid">
           <div class="form-group">
             <label>Delivery Challan / Invoice No.</label>
             <input type="text" id="grn-challan" placeholder="e.g., DC-2026-XXX">
@@ -2295,28 +2784,49 @@ function openGRNModal() {
           </div>
         </div>
 
+        <div class="form-group full-width hidden" id="grn-items-container">
+          <label>Select Items to Receive</label>
+          <div style="margin-bottom: 12px;">
+            <input type="text" id="grn-items-search" class="filter-input" placeholder="Search items..." onkeyup="filterGRNItems()" style="width: 100%; max-width: 300px;">
+          </div>
+          <div id="grn-items-checklist" class="items-checklist" style="max-height: 200px; overflow-y: auto;">
+          </div>
+        </div>
+
         <div id="grn-lines-container" class="hidden">
-          <h4 style="margin: 20px 0 12px;">Receive Items</h4>
-          <table class="data-table">
+          <h4 style="margin: 20px 0 12px;">Received Items</h4>
+          <table class="data-table" style="width: 100%; table-layout: fixed;">
             <thead>
               <tr>
-                <th>PO #</th>
-                <th>Item</th>
-                <th>Ordered</th>
-                <th>Previously Received</th>
-                <th>Receive Now</th>
-                <th>Balance</th>
+                <th style="width: 4%;">Sl No</th>
+                <th style="width: 16%;">Description of Goods</th>
+                <th style="width: 5%;">UOM</th>
+                <th style="width: 6%;">Qty</th>
+                <th style="width: 7%;">Rate</th>
+                <th style="width: 5%;">Disc %</th>
+                <th style="width: 9%;">Taxable Amt</th>
+                <th style="width: 6%;">CGST %</th>
+                <th style="width: 6%;">SGST %</th>
+                <th style="width: 6%;">IGST %</th>
+                <th style="width: 9%;">Total Amt</th>
+                <th style="width: 10%;">Rack / Bin</th>
+                <th style="width: 8%;">PO ID</th>
+                <th style="width: 5%;">Action</th>
               </tr>
             </thead>
             <tbody id="grn-lines">
             </tbody>
           </table>
+          <div style="text-align: right; margin-top: 12px; font-weight: 600;">
+            Grand Total: <span id="grn-grand-total">₹0</span>
+          </div>
         </div>
       </form>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveGRN()">Post GRN</button>
+      <button class="btn btn-outline" onclick="saveGRN('draft')">Save as Draft</button>
+      <button class="btn btn-primary" onclick="saveGRN('save')">Save Changes</button>
     </div>
   `;
 
@@ -2456,41 +2966,62 @@ function loadItemsForVendor() {
   // Get all open POs for this vendor
   const openPOs = AppData.purchaseOrders.filter(po => po.vendorId === vendorId && po.status !== 'Completed');
 
-  // Get unique items from all open POs with pending quantities
-  const itemsMap = {};
+  // Group items by itemId to find items in multiple POs
+  const itemsByItemId = {};
   openPOs.forEach(po => {
     po.items.forEach(item => {
       const pending = item.qty - item.received;
       if (pending > 0) {
-        const key = `${po.id}|${item.itemId}`;
-        itemsMap[key] = {
+        if (!itemsByItemId[item.itemId]) {
+          itemsByItemId[item.itemId] = [];
+        }
+        itemsByItemId[item.itemId].push({
           poId: po.id,
           itemId: item.itemId,
           name: item.name,
+          uom: item.uom || 'NOS',
           qty: item.qty,
           received: item.received,
           pending: pending,
-          rate: item.rate
-        };
+          rate: item.rate,
+          disc: item.disc || 0,
+          cgst: item.cgst || 9,
+          sgst: item.sgst || 9,
+          igst: item.igst || 0
+        });
       }
     });
   });
 
-  const itemsList = Object.values(itemsMap);
+  // Store for later use in updateGRNLines
+  window.grnItemsByItemId = itemsByItemId;
 
-  if (itemsList.length === 0) {
+  // Create a flat list for checkbox display (unique items)
+  const uniqueItems = Object.keys(itemsByItemId).map(itemId => {
+    const poList = itemsByItemId[itemId];
+    const totalPending = poList.reduce((sum, p) => sum + p.pending, 0);
+    return {
+      itemId: itemId,
+      name: poList[0].name,
+      poCount: poList.length,
+      poIds: poList.map(p => p.poId).join(', '),
+      totalPending: totalPending
+    };
+  });
+
+  if (uniqueItems.length === 0) {
     itemsChecklist.innerHTML = '<p style="color: var(--gray-500); padding: 12px;">No pending items for this vendor.</p>';
     itemsContainer.classList.remove('hidden');
     linesContainer.classList.add('hidden');
     return;
   }
 
-  itemsChecklist.innerHTML = itemsList.map(item => `
-    <label class="item-checkbox">
-      <input type="checkbox" value="${item.poId}|${item.itemId}" onchange="updateGRNLines()">
+  itemsChecklist.innerHTML = uniqueItems.map(item => `
+    <label class="item-checkbox" data-search="${item.name.toLowerCase()} ${item.itemId.toLowerCase()}">
+      <input type="checkbox" value="${item.itemId}" onchange="updateGRNLines()">
       <span class="item-info">
         <strong>${item.name}</strong>
-        <span class="item-meta">PO: ${item.poId} | Pending: ${item.pending}</span>
+        <span class="item-meta">${item.poCount > 1 ? `In ${item.poCount} POs (${item.poIds})` : `PO: ${item.poIds}`} | Total Pending: ${item.totalPending}</span>
       </span>
     </label>
   `).join('');
@@ -2499,128 +3030,274 @@ function loadItemsForVendor() {
   linesContainer.classList.add('hidden');
 }
 
+function filterGRNItems() {
+  const search = document.getElementById('grn-items-search').value.toLowerCase();
+  const items = document.querySelectorAll('#grn-items-checklist .item-checkbox');
+
+  items.forEach(item => {
+    const searchData = item.dataset.search || '';
+    item.style.display = searchData.includes(search) ? '' : 'none';
+  });
+}
+
 function updateGRNLines() {
   const container = document.getElementById('grn-lines-container');
   const tbody = document.getElementById('grn-lines');
-  const vendorId = document.getElementById('grn-vendor').value;
 
-  // Get all checked items
-  const checkedItems = Array.from(document.querySelectorAll('#grn-items-checklist input:checked'))
+  // Get all checked items (now just itemId, not poId|itemId)
+  const checkedItemIds = Array.from(document.querySelectorAll('#grn-items-checklist input:checked'))
     .map(cb => cb.value);
 
-  if (checkedItems.length === 0) {
+  if (checkedItemIds.length === 0) {
     container.classList.add('hidden');
     return;
   }
 
-  // Build the lines from checked items
-  const lines = checkedItems.map(key => {
-    const [poId, itemId] = key.split('|');
-    const po = AppData.purchaseOrders.find(p => p.id === poId);
-    const item = po.items.find(i => i.itemId === itemId);
-    const pending = item.qty - item.received;
-    return { poId, itemId, item, pending };
-  });
-
-  tbody.innerHTML = lines.map(line => `
-    <tr data-po-id="${line.poId}" data-item-id="${line.itemId}">
-      <td><span class="badge badge-default">${line.poId}</span></td>
-      <td>${line.item.name}</td>
-      <td>${line.item.qty}</td>
-      <td>${line.item.received}</td>
-      <td>
-        <input type="number" class="grn-receive-qty" value="${line.pending}" min="0" max="${line.pending}"
-               onchange="updateGRNBalance(this, ${line.item.qty}, ${line.item.received})" style="width: 80px;">
-      </td>
-      <td class="grn-balance">0</td>
-    </tr>
-  `).join('');
-
-  container.classList.remove('hidden');
-}
-
-function updateGRNBalance(input, ordered, prevReceived) {
-  const row = input.closest('tr');
-  const receiveNow = parseInt(input.value) || 0;
-  const pending = ordered - prevReceived;
-
-  if (receiveNow > pending) {
-    input.value = pending;
-    alert(`Cannot receive more than pending quantity (${pending})`);
-    return;
-  }
-
-  const newBalance = pending - receiveNow;
-  row.querySelector('.grn-balance').textContent = newBalance;
-}
-
-function saveGRN() {
-  const poId = document.getElementById('grn-po').value;
-  const challanNo = document.getElementById('grn-challan').value;
-  const date = document.getElementById('grn-date').value;
-
-  if (!poId) {
-    alert('Please select a Purchase Order');
-    return;
-  }
-
-  const po = AppData.purchaseOrders.find(p => p.id === poId);
-  if (!po) return;
-
-  const grnItems = [];
-  let anyReceived = false;
-
-  document.querySelectorAll('#grn-lines tr').forEach(row => {
-    const itemId = row.dataset.itemId;
-    const poItem = po.items.find(i => i.itemId === itemId);
-    const receiveQty = parseInt(row.querySelector('.grn-receive-qty').value) || 0;
-
-    if (receiveQty > 0) {
-      anyReceived = true;
-
-      grnItems.push({
-        itemId,
-        name: poItem.name,
-        ordered: poItem.qty,
-        previouslyReceived: poItem.received,
-        received: receiveQty,
-        balance: poItem.qty - poItem.received - receiveQty
+  // Build lines from checked items using the stored itemsByItemId
+  const lines = [];
+  checkedItemIds.forEach((itemId, index) => {
+    const poOptions = window.grnItemsByItemId[itemId] || [];
+    if (poOptions.length > 0) {
+      const defaultPO = poOptions[0];
+      lines.push({
+        slNo: index + 1,
+        itemId: itemId,
+        poOptions: poOptions,
+        selectedPO: defaultPO,
+        hasMultiplePOs: poOptions.length > 1
       });
-
-      // Update PO item received quantity
-      poItem.received += receiveQty;
-
-      // Update stock
-      updateStock(itemId, poItem.name, po.siteId, po.siteName, receiveQty);
     }
   });
 
-  if (!anyReceived) {
-    alert('Please enter quantity to receive for at least one item');
+  tbody.innerHTML = lines.map((line, idx) => {
+    const po = line.selectedPO;
+    const taxableAmt = (po.qty * po.rate * (1 - po.disc / 100));
+    const totalAmt = taxableAmt * (1 + (po.cgst + po.sgst + po.igst) / 100);
+
+    return `
+    <tr data-item-id="${line.itemId}" data-row-index="${idx}">
+      <td class="grn-sl-no" style="text-align: center;">${line.slNo}</td>
+      <td>${po.name}</td>
+      <td style="text-align: center;">${po.uom}</td>
+      <td><input type="number" class="grn-qty" value="${po.pending}" min="1" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+      <td><input type="number" class="grn-rate" value="${po.rate}" min="0" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+      <td><input type="number" class="grn-disc" value="${po.disc}" min="0" max="100" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+      <td class="grn-taxable-amt" style="text-align: right;">₹${formatCurrency(taxableAmt)}</td>
+      <td><input type="number" class="grn-cgst" value="${po.cgst}" min="0" max="100" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+      <td><input type="number" class="grn-sgst" value="${po.sgst}" min="0" max="100" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+      <td><input type="number" class="grn-igst" value="${po.igst}" min="0" max="100" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+      <td class="grn-line-total" style="text-align: right;">₹${formatCurrency(totalAmt)}</td>
+      <td><input type="text" class="grn-rack" placeholder="e.g., A1-01" style="width: 100%;"></td>
+      <td>
+        ${line.hasMultiplePOs ? `
+          <select class="grn-po-select" onchange="changeGRNLinePO(this, '${line.itemId}')" style="width: 100%;">
+            ${line.poOptions.map(opt => `<option value="${opt.poId}" ${opt.poId === po.poId ? 'selected' : ''}>${opt.poId} (Pend: ${opt.pending})</option>`).join('')}
+          </select>
+        ` : `<span class="badge badge-default">${po.poId}</span>`}
+      </td>
+      <td style="text-align: center;">
+        <button type="button" class="action-icon delete" onclick="removeGRNLine(this)" title="Remove">🗑️</button>
+      </td>
+    </tr>
+  `;
+  }).join('');
+
+  container.classList.remove('hidden');
+  updateGRNGrandTotal();
+}
+
+function changeGRNLinePO(select, itemId) {
+  const selectedPOId = select.value;
+  const poOptions = window.grnItemsByItemId[itemId] || [];
+  const selectedPO = poOptions.find(p => p.poId === selectedPOId);
+
+  if (!selectedPO) return;
+
+  const row = select.closest('tr');
+  row.querySelector('.grn-qty').value = selectedPO.pending;
+  row.querySelector('.grn-rate').value = selectedPO.rate;
+  row.querySelector('.grn-disc').value = selectedPO.disc;
+  row.querySelector('.grn-cgst').value = selectedPO.cgst;
+  row.querySelector('.grn-sgst').value = selectedPO.sgst;
+  row.querySelector('.grn-igst').value = selectedPO.igst;
+
+  updateGRNLineTotal(row.querySelector('.grn-qty'));
+}
+
+function updateGRNLineTotal(el) {
+  const row = el.closest('tr');
+  const qty = parseInt(row.querySelector('.grn-qty').value) || 0;
+  const rate = parseFloat(row.querySelector('.grn-rate').value) || 0;
+  const disc = parseFloat(row.querySelector('.grn-disc').value) || 0;
+  const cgst = parseFloat(row.querySelector('.grn-cgst').value) || 0;
+  const sgst = parseFloat(row.querySelector('.grn-sgst').value) || 0;
+  const igst = parseFloat(row.querySelector('.grn-igst').value) || 0;
+
+  const grossAmount = qty * rate;
+  const discountAmount = grossAmount * (disc / 100);
+  const taxableAmount = grossAmount - discountAmount;
+  const cgstAmount = taxableAmount * (cgst / 100);
+  const sgstAmount = taxableAmount * (sgst / 100);
+  const igstAmount = taxableAmount * (igst / 100);
+  const totalAmount = taxableAmount + cgstAmount + sgstAmount + igstAmount;
+
+  row.querySelector('.grn-taxable-amt').textContent = `₹${formatCurrency(taxableAmount)}`;
+  row.querySelector('.grn-line-total').textContent = `₹${formatCurrency(totalAmount)}`;
+  updateGRNGrandTotal();
+}
+
+function updateGRNGrandTotal() {
+  let total = 0;
+  document.querySelectorAll('#grn-lines tr').forEach(row => {
+    const qty = parseInt(row.querySelector('.grn-qty')?.value) || 0;
+    const rate = parseFloat(row.querySelector('.grn-rate')?.value) || 0;
+    const disc = parseFloat(row.querySelector('.grn-disc')?.value) || 0;
+    const cgst = parseFloat(row.querySelector('.grn-cgst')?.value) || 0;
+    const sgst = parseFloat(row.querySelector('.grn-sgst')?.value) || 0;
+    const igst = parseFloat(row.querySelector('.grn-igst')?.value) || 0;
+
+    const grossAmount = qty * rate;
+    const discountAmount = grossAmount * (disc / 100);
+    const taxableAmount = grossAmount - discountAmount;
+    total += taxableAmount * (1 + (cgst + sgst + igst) / 100);
+  });
+  const grandTotalEl = document.getElementById('grn-grand-total');
+  if (grandTotalEl) {
+    grandTotalEl.textContent = `₹${formatCurrency(total)}`;
+  }
+}
+
+function removeGRNLine(btn) {
+  const row = btn.closest('tr');
+  const itemId = row.dataset.itemId;
+
+  // Uncheck the corresponding checkbox
+  const checkbox = document.querySelector(`#grn-items-checklist input[value="${itemId}"]`);
+  if (checkbox) {
+    checkbox.checked = false;
+  }
+
+  row.remove();
+  renumberGRNLines();
+  updateGRNGrandTotal();
+
+  // Hide container if no lines left
+  if (document.querySelectorAll('#grn-lines tr').length === 0) {
+    document.getElementById('grn-lines-container').classList.add('hidden');
+  }
+}
+
+function renumberGRNLines() {
+  document.querySelectorAll('#grn-lines tr').forEach((row, index) => {
+    row.querySelector('.grn-sl-no').textContent = index + 1;
+  });
+}
+
+function saveGRN(action = 'save') {
+  const vendorId = document.getElementById('grn-vendor').value;
+  const department = document.getElementById('grn-department').value;
+  const section = document.getElementById('grn-section').value;
+  const godown = document.getElementById('grn-godown').value;
+  const challanNo = document.getElementById('grn-challan').value;
+  const date = document.getElementById('grn-date').value;
+
+  if (!vendorId) {
+    alert('Please select a Vendor');
     return;
   }
 
-  // Update PO status
-  const allReceived = po.items.every(i => i.received >= i.qty);
-  const anyPartial = po.items.some(i => i.received > 0 && i.received < i.qty);
+  if (!department || !section || !godown) {
+    alert('Please select Department, Section and Godown');
+    return;
+  }
 
-  if (allReceived) {
-    po.status = 'Completed';
-  } else if (anyPartial || po.items.some(i => i.received > 0)) {
-    po.status = 'Partially Received';
+  const vendor = AppData.vendors.find(v => v.id === vendorId);
+  const grnItems = [];
+  let total = 0;
+
+  document.querySelectorAll('#grn-lines tr').forEach(row => {
+    const itemId = row.dataset.itemId;
+    const poSelect = row.querySelector('.grn-po-select');
+    const poId = poSelect ? poSelect.value : row.querySelector('.badge')?.textContent;
+
+    const qty = parseInt(row.querySelector('.grn-qty').value) || 0;
+    const rate = parseFloat(row.querySelector('.grn-rate').value) || 0;
+    const disc = parseFloat(row.querySelector('.grn-disc').value) || 0;
+    const cgst = parseFloat(row.querySelector('.grn-cgst').value) || 0;
+    const sgst = parseFloat(row.querySelector('.grn-sgst').value) || 0;
+    const igst = parseFloat(row.querySelector('.grn-igst').value) || 0;
+    const rack = row.querySelector('.grn-rack').value;
+
+    const grossAmount = qty * rate;
+    const discountAmount = grossAmount * (disc / 100);
+    const taxableAmount = grossAmount - discountAmount;
+    const lineTotal = taxableAmount * (1 + (cgst + sgst + igst) / 100);
+
+    const poOptions = window.grnItemsByItemId[itemId] || [];
+    const itemData = poOptions.find(p => p.poId === poId) || poOptions[0];
+
+    if (qty > 0) {
+      grnItems.push({
+        itemId,
+        poId,
+        name: itemData.name,
+        uom: itemData.uom,
+        qty,
+        rate,
+        disc,
+        taxableAmount,
+        cgst,
+        sgst,
+        igst,
+        total: lineTotal,
+        rack,
+        ordered: itemData.qty,
+        previouslyReceived: itemData.received
+      });
+      total += lineTotal;
+
+      // Update PO item received quantity (only if saving, not draft)
+      if (action === 'save') {
+        const po = AppData.purchaseOrders.find(p => p.id === poId);
+        if (po) {
+          const poItem = po.items.find(i => i.itemId === itemId);
+          if (poItem) {
+            poItem.received += qty;
+
+            // Update PO status
+            const allReceived = po.items.every(i => i.received >= i.qty);
+            if (allReceived) {
+              po.status = 'Completed';
+            } else if (po.items.some(i => i.received > 0)) {
+              po.status = 'Partially Received';
+            }
+
+            // Update stock
+            updateStock(itemId, itemData.name, po.siteId, po.siteName, qty);
+          }
+        }
+      }
+    }
+  });
+
+  if (grnItems.length === 0) {
+    alert('Please add at least one item to receive');
+    return;
   }
 
   // Create GRN
   const newGRN = {
     id: generateId('GRN'),
-    poId,
-    vendorName: po.vendorName,
-    siteId: po.siteId,
-    siteName: po.siteName,
+    vendorId,
+    vendorName: vendor.name,
+    department,
+    section,
+    godown,
     challanNo,
     date,
-    status: 'Posted',
-    items: grnItems
+    status: action === 'draft' ? 'Draft' : 'Posted',
+    items: grnItems,
+    total
   };
 
   AppData.goodsReceipts.unshift(newGRN);
@@ -2646,6 +3323,16 @@ function updateStock(itemId, itemName, siteId, siteName, qty) {
       lastMovement: new Date().toISOString().split('T')[0]
     });
   }
+}
+
+function editGRN(grnId) {
+  const grn = AppData.goodsReceipts.find(g => g.id === grnId);
+  if (!grn || grn.status !== 'Draft') {
+    alert('Only draft GRNs can be edited');
+    return;
+  }
+  // For now, show a message - full edit would require loading GRN data into the modal
+  alert('Edit functionality for GRN ' + grnId + ' - This would open the GRN form with existing data for editing.');
 }
 
 function viewGRN(grnId) {

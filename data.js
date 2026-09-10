@@ -632,6 +632,7 @@ function formatDate(dateStr) {
 
 function getStatusBadgeClass(status) {
   const statusMap = {
+    'Draft': 'badge-draft',
     'Open': 'badge-warning',
     'Partially Received': 'badge-warning',
     'Completed': 'badge-success',
