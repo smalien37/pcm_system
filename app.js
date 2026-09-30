@@ -533,6 +533,22 @@ function getKeyboardHints() {
   `;
 }
 
+// Generate PO Number in format PO-NMTPL-XXXX
+function generatePONumber() {
+  const year = new Date().getFullYear();
+  const existingPOs = AppData.purchaseOrders.filter(po => po.id && po.id.startsWith(`PO${year}`));
+  const nextNum = existingPOs.length + 1;
+  return `PO-NMTPL-${String(nextNum).padStart(4, '0')}`;
+}
+
+// Generate GRN Number in format GRN-XXXX-YYYY
+function generateGRNNumber() {
+  const year = new Date().getFullYear();
+  const existingGRNs = AppData.goodsReceipts.filter(grn => grn.id && grn.id.includes(year.toString()));
+  const nextNum = existingGRNs.length + 1;
+  return `GRN${year}-${String(nextNum).padStart(5, '0')}`;
+}
+
 // Financial Year filter options
 function getFinancialYearOptions() {
   const currentYear = new Date().getFullYear();
@@ -694,22 +710,15 @@ function downloadCSV(data, filename, headers) {
 function getPOSummaryCards(orders) {
   const totalAmount = orders.reduce((sum, po) => sum + (po.total || 0), 0);
 
-  // Outstanding = Total of non-completed POs
-  const outstandingAmount = orders
-    .filter(po => po.status !== 'Completed')
+  // Cleared = Total of completed POs
+  const clearedAmount = orders
+    .filter(po => po.status === 'Completed')
     .reduce((sum, po) => sum + (po.total || 0), 0);
 
-  // Tax = Sum of all tax amounts from items
-  const taxAmount = orders.reduce((sum, po) => {
-    const poTax = (po.items || []).reduce((itemSum, item) => {
-      const taxable = item.taxableAmount || (item.qty * item.rate * (1 - (item.disc || 0) / 100));
-      const cgst = taxable * ((item.cgst || 0) / 100);
-      const sgst = taxable * ((item.sgst || 0) / 100);
-      const igst = taxable * ((item.igst || 0) / 100);
-      return itemSum + cgst + sgst + igst;
-    }, 0);
-    return sum + poTax;
-  }, 0);
+  // Pending = Total of non-completed POs
+  const pendingAmount = orders
+    .filter(po => po.status !== 'Completed')
+    .reduce((sum, po) => sum + (po.total || 0), 0);
 
   return `
     <div class="summary-card">
@@ -722,15 +731,15 @@ function getPOSummaryCards(orders) {
     <div class="summary-card">
       <div class="summary-card-icon" style="background: #fef3c7; color: #d97706;">⏳</div>
       <div class="summary-card-content">
-        <div class="summary-card-label">Total Outstanding Payment</div>
-        <div class="summary-card-value">₹${formatCurrency(outstandingAmount)}</div>
+        <div class="summary-card-label">Total Cleared PO</div>
+        <div class="summary-card-value">₹${formatCurrency(clearedAmount)}</div>
       </div>
     </div>
     <div class="summary-card">
       <div class="summary-card-icon" style="background: #d1fae5; color: #059669;">💰</div>
       <div class="summary-card-content">
-        <div class="summary-card-label">Tax Paid to Seller</div>
-        <div class="summary-card-value">₹${formatCurrency(taxAmount)}</div>
+        <div class="summary-card-label">Total PO Pending</div>
+        <div class="summary-card-value">₹${formatCurrency(pendingAmount)}</div>
       </div>
     </div>
   `;
@@ -1886,6 +1895,9 @@ function filterPOs() {
 }
 
 function openPOModal() {
+  const poNumber = generatePONumber();
+  const poDate = new Date().toISOString().split('T')[0];
+
   modalContent.classList.add('modal-wide');
   modalContent.innerHTML = `
     <div class="modal-header">
@@ -1902,6 +1914,17 @@ function openPOModal() {
               ${AppData.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
             </select>
           </div>
+          <div class="form-group">
+            <label>PO Number *</label>
+            <input type="text" id="po-number" value="${poNumber}" readonly style="background: var(--gray-100); cursor: not-allowed;">
+          </div>
+          <div class="form-group">
+            <label>PO Date</label>
+            <input type="text" id="po-po-date" value="PO DATE : ${formatDate(poDate)}" readonly style="background: var(--gray-100); cursor: not-allowed;">
+          </div>
+        </div>
+
+        <div class="form-grid">
           <div class="form-group">
             <label>Department *</label>
             <select id="po-department" required>
@@ -1925,7 +1948,7 @@ function openPOModal() {
         <div class="form-grid">
           <div class="form-group">
             <label>Delivery date</label>
-            <input type="date" id="po-date" value="${new Date().toISOString().split('T')[0]}">
+            <input type="date" id="po-date" value="${poDate}">
           </div>
           <div class="form-group">
             <label>Remarks</label>
@@ -1982,13 +2005,17 @@ function openPOModal() {
                 </tr>
               </tbody>
             </table>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; flex-wrap: wrap; gap: 12px;">
             <div style="display: flex; gap: 12px;">
               <button type="button" class="btn btn-sm btn-outline" onclick="openOnTheFlyItemModal()">+ On-the-fly item</button>
               <button type="button" class="btn btn-sm btn-primary" onclick="addPOLine()">+ Add line</button>
             </div>
-            <div style="font-weight: 600;">
-              Grand Total: <span id="po-grand-total">₹0</span>
+            <div style="display: flex; gap: 24px; font-size: 13px; color: var(--gray-700);">
+              <span>Total Taxable: <strong id="po-total-taxable">₹0</strong></span>
+              <span>CGST: <strong id="po-total-cgst">₹0</strong></span>
+              <span>SGST: <strong id="po-total-sgst">₹0</strong></span>
+              <span>IGST: <strong id="po-total-igst">₹0</strong></span>
+              <span style="font-weight: 700; color: var(--gray-900);">TOTAL AMOUNT: <span id="po-grand-total">₹0</span></span>
             </div>
           </div>
         </div>
@@ -2315,7 +2342,12 @@ function editPOLine(btn) {
 }
 
 function updatePOGrandTotal() {
-  let total = 0;
+  let totalTaxable = 0;
+  let totalCGST = 0;
+  let totalSGST = 0;
+  let totalIGST = 0;
+  let grandTotal = 0;
+
   document.querySelectorAll('#po-lines tr').forEach(row => {
     const qty = parseInt(row.querySelector('.po-qty').value) || 0;
     const rate = parseFloat(row.querySelector('.po-rate').value) || 0;
@@ -2330,9 +2362,25 @@ function updatePOGrandTotal() {
     const cgstAmount = taxableAmount * (cgst / 100);
     const sgstAmount = taxableAmount * (sgst / 100);
     const igstAmount = taxableAmount * (igst / 100);
-    total += taxableAmount + cgstAmount + sgstAmount + igstAmount;
+
+    totalTaxable += taxableAmount;
+    totalCGST += cgstAmount;
+    totalSGST += sgstAmount;
+    totalIGST += igstAmount;
+    grandTotal += taxableAmount + cgstAmount + sgstAmount + igstAmount;
   });
-  document.getElementById('po-grand-total').textContent = `₹${formatCurrency(total)}`;
+
+  const taxableEl = document.getElementById('po-total-taxable');
+  const cgstEl = document.getElementById('po-total-cgst');
+  const sgstEl = document.getElementById('po-total-sgst');
+  const igstEl = document.getElementById('po-total-igst');
+  const grandTotalEl = document.getElementById('po-grand-total');
+
+  if (taxableEl) taxableEl.textContent = `₹${formatCurrency(totalTaxable)}`;
+  if (cgstEl) cgstEl.textContent = `₹${formatCurrency(totalCGST)}`;
+  if (sgstEl) sgstEl.textContent = `₹${formatCurrency(totalSGST)}`;
+  if (igstEl) igstEl.textContent = `₹${formatCurrency(totalIGST)}`;
+  if (grandTotalEl) grandTotalEl.textContent = `₹${formatCurrency(grandTotal)}`;
 }
 
 function savePO(action = 'save') {
@@ -2532,7 +2580,7 @@ function renderGoodsReceipt() {
             <a href="#" class="dropdown-item" onclick="exportGRN('all'); return false;">Export All</a>
           </div>
         </div>
-        <button class="btn btn-primary" id="btn-new-grn">+ Receive against Vendors</button>
+        <button class="btn btn-primary" id="btn-new-grn">Receive Against Vendors</button>
       </div>
     </div>
 
@@ -2706,60 +2754,66 @@ function openGRNModal() {
   const vendorIdsWithOpenPOs = [...new Set(openPOs.map(po => po.vendorId))];
   const vendorsWithOpenPOs = AppData.vendors.filter(v => vendorIdsWithOpenPOs.includes(v.id));
 
+  const grnNumber = generateGRNNumber();
+  const grnDate = new Date().toISOString().split('T')[0];
+
   modalContent.classList.add('modal-wide');
   modalContent.innerHTML = `
     <div class="modal-header">
-      <h2>New Goods Receipt</h2>
+      <h2>GRN Input Form</h2>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
       <form id="grn-form">
         <div class="form-grid">
           <div class="form-group">
-            <label>Select Vendor *</label>
-            <select id="grn-vendor" required onchange="loadItemsForVendor()">
-              <option value="">Select Vendor...</option>
+            <label>Vendor Name *</label>
+            <select id="grn-vendor" required onchange="loadPOsForVendor()">
+              <option value="">(SELECT FROM LIST)</option>
               ${vendorsWithOpenPOs.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
-            <label>Department *</label>
-            <select id="grn-department" required>
-              <option value="">Select Department</option>
-              <option value="Maintenance">Maintenance</option>
-              <option value="Production">Production</option>
-              <option value="HR">HR</option>
-            </select>
+            <label>Date *</label>
+            <input type="date" id="grn-date" value="${grnDate}">
           </div>
           <div class="form-group">
-            <label>Section *</label>
-            <select id="grn-section" required>
-              <option value="">Select Section</option>
-              <option value="Tipper">Tipper</option>
-              <option value="Excavator">Excavator</option>
-              <option value="Loader">Loader</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Godown *</label>
-            <select id="grn-godown" required>
-              <option value="">Select Godown</option>
-              <option value="Godown A">Godown A</option>
-              <option value="Godown B">Godown B</option>
-              <option value="Godown C">Godown C</option>
-              <option value="Godown D">Godown D</option>
-            </select>
+            <label>GRN No</label>
+            <input type="text" id="grn-number" value="${grnNumber}" readonly style="background: var(--gray-100); cursor: not-allowed;">
           </div>
         </div>
 
         <div class="form-grid">
           <div class="form-group">
-            <label>Delivery Challan / Invoice No.</label>
-            <input type="text" id="grn-challan" placeholder="e.g., DC-2026-XXX">
+            <label>PO No & Date *</label>
+            <select id="grn-po" required onchange="onPOSelected()">
+              <option value="">(SELECT FROM OPEN PO)</option>
+            </select>
           </div>
           <div class="form-group">
-            <label>Received Date</label>
-            <input type="date" id="grn-date" value="${new Date().toISOString().split('T')[0]}">
+            <label>Challan / Invoice NO & Date</label>
+            <input type="text" id="grn-challan" placeholder="(MANUAL ENTRY)">
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Department</label>
+            <input type="text" id="grn-department" readonly placeholder="(AUTO FILL FROM PO NO)" style="background: var(--gray-100); cursor: not-allowed;">
+          </div>
+          <div class="form-group">
+            <label>Section</label>
+            <input type="text" id="grn-section" readonly placeholder="(AUTO FILL FROM PO NO)" style="background: var(--gray-100); cursor: not-allowed;">
+          </div>
+          <div class="form-group">
+            <label>Godown *</label>
+            <select id="grn-godown" required>
+              <option value="">(MANUAL ENTRY)</option>
+              <option value="Godown A">Godown A</option>
+              <option value="Godown B">Godown B</option>
+              <option value="Godown C">Godown C</option>
+              <option value="Godown D">Godown D</option>
+            </select>
           </div>
         </div>
 
@@ -2796,15 +2850,18 @@ function openGRNModal() {
             <tbody id="grn-lines">
             </tbody>
           </table>
-          <div style="text-align: right; margin-top: 12px; font-weight: 600;">
-            Grand Total: <span id="grn-grand-total">₹0</span>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+            <button type="button" class="btn btn-sm btn-outline" onclick="addGRNLineManually()">+ Add New</button>
+            <div style="font-weight: 600;">
+              Total: <span id="grn-grand-total">₹0</span>
+            </div>
           </div>
         </div>
       </form>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-outline" onclick="saveGRN('draft')">Save as Draft</button>
+      <button class="btn btn-outline" onclick="saveGRN('draft')">Save As Draft</button>
       <button class="btn btn-primary" onclick="saveGRN('save')">Save Changes</button>
     </div>
   `;
@@ -3019,6 +3076,124 @@ function filterGRNItems() {
   });
 }
 
+// Load POs for selected vendor
+function loadPOsForVendor() {
+  const vendorId = document.getElementById('grn-vendor').value;
+  const poSelect = document.getElementById('grn-po');
+  const itemsContainer = document.getElementById('grn-items-container');
+  const linesContainer = document.getElementById('grn-lines-container');
+
+  // Reset fields
+  document.getElementById('grn-department').value = '';
+  document.getElementById('grn-section').value = '';
+
+  if (!vendorId) {
+    poSelect.innerHTML = '<option value="">(SELECT FROM OPEN PO)</option>';
+    if (itemsContainer) itemsContainer.classList.add('hidden');
+    if (linesContainer) linesContainer.classList.add('hidden');
+    return;
+  }
+
+  // Get all open POs for this vendor
+  const openPOs = AppData.purchaseOrders.filter(po => po.vendorId === vendorId && po.status !== 'Completed');
+
+  if (openPOs.length === 0) {
+    poSelect.innerHTML = '<option value="">No open POs available</option>';
+    return;
+  }
+
+  poSelect.innerHTML = `
+    <option value="">(SELECT FROM OPEN PO)</option>
+    ${openPOs.map(po => `<option value="${po.id}">${po.id} : ${formatDate(po.date)}</option>`).join('')}
+  `;
+}
+
+// When PO is selected, auto-fill department/section and load items
+function onPOSelected() {
+  const poId = document.getElementById('grn-po').value;
+  const departmentInput = document.getElementById('grn-department');
+  const sectionInput = document.getElementById('grn-section');
+  const itemsContainer = document.getElementById('grn-items-container');
+  const itemsChecklist = document.getElementById('grn-items-checklist');
+  const linesContainer = document.getElementById('grn-lines-container');
+
+  if (!poId) {
+    departmentInput.value = '';
+    sectionInput.value = '';
+    if (itemsContainer) itemsContainer.classList.add('hidden');
+    if (linesContainer) linesContainer.classList.add('hidden');
+    return;
+  }
+
+  const po = AppData.purchaseOrders.find(p => p.id === poId);
+  if (!po) return;
+
+  // Auto-fill department and section from PO
+  departmentInput.value = po.department || '';
+  sectionInput.value = po.section || '';
+
+  // Get pending items from this PO
+  const itemsByItemId = {};
+  po.items.forEach(item => {
+    const pending = item.qty - item.received;
+    if (pending > 0) {
+      if (!itemsByItemId[item.itemId]) {
+        itemsByItemId[item.itemId] = [];
+      }
+      itemsByItemId[item.itemId].push({
+        poId: po.id,
+        itemId: item.itemId,
+        name: item.name,
+        uom: item.uom || 'NOS',
+        qty: item.qty,
+        received: item.received,
+        pending: pending,
+        rate: item.rate,
+        disc: item.disc || 0,
+        cgst: item.cgst || 9,
+        sgst: item.sgst || 9,
+        igst: item.igst || 0
+      });
+    }
+  });
+
+  // Store for later use
+  window.grnItemsByItemId = itemsByItemId;
+
+  // Create items list for selection
+  const uniqueItems = Object.keys(itemsByItemId).map(itemId => {
+    const poList = itemsByItemId[itemId];
+    const totalPending = poList.reduce((sum, p) => sum + p.pending, 0);
+    return {
+      itemId: itemId,
+      name: poList[0].name,
+      totalPending: totalPending
+    };
+  });
+
+  if (uniqueItems.length === 0) {
+    itemsChecklist.innerHTML = '<p style="color: var(--gray-500); padding: 12px;">No pending items for this PO.</p>';
+    itemsContainer.classList.remove('hidden');
+    linesContainer.classList.add('hidden');
+    return;
+  }
+
+  itemsChecklist.innerHTML = uniqueItems.map(item => `
+    <label class="item-checkbox" data-search="${item.name.toLowerCase()} ${item.itemId.toLowerCase()}">
+      <input type="checkbox" value="${item.itemId}" onchange="updateGRNLines()" checked>
+      <span class="item-info">
+        <strong>${item.name}</strong>
+        <span class="item-meta">Pending: ${item.totalPending}</span>
+      </span>
+    </label>
+  `).join('');
+
+  itemsContainer.classList.remove('hidden');
+
+  // Auto-populate lines
+  updateGRNLines();
+}
+
 function updateGRNLines() {
   const container = document.getElementById('grn-lines-container');
   const tbody = document.getElementById('grn-lines');
@@ -3172,8 +3347,56 @@ function renumberGRNLines() {
   });
 }
 
+function addGRNLineManually() {
+  const container = document.getElementById('grn-lines-container');
+  const tbody = document.getElementById('grn-lines');
+  const slNo = tbody.querySelectorAll('tr').length + 1;
+
+  const row = document.createElement('tr');
+  row.dataset.itemId = 'manual-' + slNo;
+  row.dataset.rowIndex = slNo - 1;
+  row.innerHTML = `
+    <td class="grn-sl-no" style="text-align: center;">${slNo}</td>
+    <td>
+      <select class="grn-item-select" onchange="updateGRNLineFromItem(this)" style="width: 100%;">
+        <option value="">Select Item</option>
+        ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}" data-uom="${i.uom || 'NOS'}">${i.name}</option>`).join('')}
+      </select>
+    </td>
+    <td style="text-align: center;">-</td>
+    <td><input type="number" class="grn-qty" value="1" min="1" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+    <td><input type="number" class="grn-rate" value="0" min="0" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+    <td><input type="number" class="grn-disc" value="0" min="0" max="100" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+    <td class="grn-taxable-amt" style="text-align: right;">₹0</td>
+    <td><input type="number" class="grn-cgst" value="9" min="0" max="100" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+    <td><input type="number" class="grn-sgst" value="9" min="0" max="100" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+    <td><input type="number" class="grn-igst" value="0" min="0" max="100" onchange="updateGRNLineTotal(this)" style="width: 100%;"></td>
+    <td class="grn-line-total" style="text-align: right;">₹0</td>
+    <td><input type="text" class="grn-rack" placeholder="e.g., A1-01" style="width: 100%;"></td>
+    <td><span class="badge badge-default">Manual</span></td>
+    <td style="text-align: center;">
+      <button type="button" class="action-icon delete" onclick="removeGRNLine(this)" title="Remove">🗑️</button>
+    </td>
+  `;
+
+  tbody.appendChild(row);
+  container.classList.remove('hidden');
+  updateGRNGrandTotal();
+}
+
+function updateGRNLineFromItem(select) {
+  const row = select.closest('tr');
+  const selectedOption = select.options[select.selectedIndex];
+
+  if (selectedOption && selectedOption.value) {
+    const uomCell = row.querySelectorAll('td')[2];
+    uomCell.textContent = selectedOption.dataset.uom || '-';
+  }
+}
+
 function saveGRN(action = 'save') {
   const vendorId = document.getElementById('grn-vendor').value;
+  const poId = document.getElementById('grn-po').value;
   const department = document.getElementById('grn-department').value;
   const section = document.getElementById('grn-section').value;
   const godown = document.getElementById('grn-godown').value;
@@ -3185,8 +3408,13 @@ function saveGRN(action = 'save') {
     return;
   }
 
-  if (!department || !section || !godown) {
-    alert('Please select Department, Section and Godown');
+  if (!poId) {
+    alert('Please select a PO');
+    return;
+  }
+
+  if (!godown) {
+    alert('Please select Godown');
     return;
   }
 
@@ -3385,60 +3613,653 @@ function viewGRN(grnId) {
 
 // ============ STOCK ============
 function renderStock() {
+  const totalConsumptionAmount = (AppData.stockConsumptions || []).reduce((sum, sc) => sum + (sc.total || 0), 0);
+  const postedCount = (AppData.stockConsumptions || []).filter(sc => sc.status === 'Posted').length;
+  const draftCount = (AppData.stockConsumptions || []).filter(sc => sc.status === 'Draft').length;
+
   return `
     <div class="page-header">
       <div class="page-title">
         <span class="page-title-icon">📦</span>
         <div>
-          <h1>Stock</h1>
-          <p class="page-subtitle">On-hand balances, reorder alerts, and site movements in one place.</p>
+          <h1>Stock Consumption</h1>
+          <p class="page-subtitle">Track stock consumption against cost centers and job cards.</p>
         </div>
       </div>
       <div class="page-actions">
         <button class="btn btn-secondary" onclick="location.reload()">Refresh</button>
-        <button class="btn btn-primary">Stock movement</button>
+        <div class="dropdown">
+          <button class="btn btn-secondary dropdown-toggle" onclick="toggleDropdown('sc-export-dropdown')">
+            Export <span class="dropdown-arrow">▼</span>
+          </button>
+          <div class="dropdown-menu" id="sc-export-dropdown">
+            <a href="#" class="dropdown-item" onclick="exportSC('current'); return false;">Export Current Page</a>
+            <a href="#" class="dropdown-item" onclick="exportSC('all'); return false;">Export All</a>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-new-sc">+ Create New</button>
       </div>
     </div>
 
-    <div class="tabs">
-      <button class="tab active">On hand</button>
-      <button class="tab">Reorder (${AppData.stock.filter(s => s.onHand <= s.reorder).length})</button>
-      <button class="tab">Movements</button>
+    <div class="tabs" id="stock-tabs">
+      <button class="tab active" data-tab="consumption">Stock Consumption</button>
+      <button class="tab" data-tab="onhand">On Hand</button>
+      <button class="tab" data-tab="reorder">Reorder (${AppData.stock.filter(s => s.onHand <= s.reorder).length})</button>
     </div>
 
-    <div class="filters-bar">
-      <input type="text" class="filter-input" id="stock-search" placeholder="Search SKU or item name...">
-      <select class="filter-select" id="stock-site-filter">
-        <option value="">Site</option>
-        ${AppData.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
-      </select>
+    <div id="consumption-tab-content">
+      <div class="filters-bar" style="flex-wrap: wrap; gap: 8px;">
+        <input type="date" class="filter-select" id="sc-start-date" style="width: 140px;">
+        <input type="date" class="filter-select" id="sc-end-date" style="width: 140px;">
+        <select class="filter-select" id="sc-status-filter">
+          <option value="">All Status</option>
+          <option value="Posted">Posted</option>
+          <option value="Draft">Draft</option>
+        </select>
+        <input type="text" class="filter-input" id="sc-search" placeholder="Search SC Number..." style="max-width: 200px;">
+        <button class="btn btn-secondary" onclick="filterSC()">More Filters</button>
+        <button class="btn btn-outline" onclick="filterSC()">Search</button>
+        <button class="btn btn-secondary" onclick="clearSCFilters()">Clear</button>
+      </div>
+
+      <div class="summary-cards" id="sc-summary-cards">
+        <div class="summary-card">
+          <div class="summary-card-icon" style="background: #dbeafe; color: #2563eb;">📋</div>
+          <div class="summary-card-content">
+            <div class="summary-card-label">Total recorded purchase order amount is</div>
+            <div class="summary-card-value">₹${formatCurrency(totalConsumptionAmount)}</div>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-card-icon" style="background: #fef3c7; color: #d97706;">⏳</div>
+          <div class="summary-card-content">
+            <div class="summary-card-label">Total outstanding Payment for PO is</div>
+            <div class="summary-card-value">₹${formatCurrency(totalConsumptionAmount)}</div>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-card-icon" style="background: #d1fae5; color: #059669;">💰</div>
+          <div class="summary-card-content">
+            <div class="summary-card-label">Tax paid to the seller</div>
+            <div class="summary-card-value">₹0</div>
+          </div>
+        </div>
+      </div>
+
+      ${getKeyboardHints()}
+
+      <div class="card" style="overflow-x: auto;">
+        <table class="data-table" id="sc-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>SC Number</th>
+              <th>Department</th>
+              <th>Section</th>
+              <th>Cost Center</th>
+              <th>Godown</th>
+              <th>Amount</th>
+              <th>Created By</th>
+              <th>Approved By</th>
+              <th>View & Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderSCRows(AppData.stockConsumptions || [])}
+          </tbody>
+        </table>
+      </div>
     </div>
 
-    ${getKeyboardHints()}
+    <div id="onhand-tab-content" class="hidden">
+      <div class="filters-bar">
+        <input type="text" class="filter-input" id="stock-search" placeholder="Search SKU or item name...">
+        <select class="filter-select" id="stock-site-filter">
+          <option value="">Site</option>
+          ${AppData.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+        </select>
+      </div>
 
-    <div class="card">
-      <table class="data-table" id="stock-table">
-        <thead>
-          <tr>
-            <th>SKU</th>
-            <th>Item</th>
-            <th>Site</th>
-            <th>On Hand</th>
-            <th>Reorder</th>
-            <th>Last Movement</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${renderStockRows(AppData.stock)}
-        </tbody>
-      </table>
+      <div class="card">
+        <table class="data-table" id="stock-table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Item</th>
+              <th>Site</th>
+              <th>On Hand</th>
+              <th>Reorder</th>
+              <th>Last Movement</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderStockRows(AppData.stock)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="reorder-tab-content" class="hidden">
+      <div class="card">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Item</th>
+              <th>Site</th>
+              <th>On Hand</th>
+              <th>Reorder Level</th>
+              <th>Shortfall</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${AppData.stock.filter(s => s.onHand <= s.reorder).map(s => `
+              <tr>
+                <td>${s.sku}</td>
+                <td><strong>${s.itemName}</strong></td>
+                <td>${s.siteName}</td>
+                <td><span class="badge badge-danger">${s.onHand}</span></td>
+                <td>${s.reorder}</td>
+                <td><span class="stock-low">${s.reorder - s.onHand}</span></td>
+              </tr>
+            `).join('') || '<tr><td colspan="6" class="empty-state">No items below reorder level</td></tr>'}
+          </tbody>
+        </table>
+      </div>
     </div>
   `;
 }
 
 function setupStockHandlers() {
+  document.getElementById('btn-new-sc')?.addEventListener('click', () => openSCModal());
   document.getElementById('stock-search')?.addEventListener('input', filterStock);
   document.getElementById('stock-site-filter')?.addEventListener('change', filterStock);
+  document.getElementById('sc-search')?.addEventListener('input', filterSC);
+  document.getElementById('sc-status-filter')?.addEventListener('change', filterSC);
+
+  // Tab switching
+  document.querySelectorAll('#stock-tabs .tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#stock-tabs .tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      const tabName = tab.dataset.tab;
+      document.getElementById('consumption-tab-content')?.classList.toggle('hidden', tabName !== 'consumption');
+      document.getElementById('onhand-tab-content')?.classList.toggle('hidden', tabName !== 'onhand');
+      document.getElementById('reorder-tab-content')?.classList.toggle('hidden', tabName !== 'reorder');
+    });
+  });
+}
+
+function renderSCRows(consumptions) {
+  return consumptions.map(sc => `
+    <tr>
+      <td>${formatDate(sc.date)}</td>
+      <td><strong>${sc.id}</strong></td>
+      <td>${sc.department || '-'}</td>
+      <td>${sc.section || '-'}</td>
+      <td>${sc.costCenter || '-'}</td>
+      <td>${sc.godown || '-'}</td>
+      <td>₹${formatCurrency(sc.total || 0)}</td>
+      <td>${sc.createdBy || 'Admin'}</td>
+      <td>${sc.approvedBy || '-'}</td>
+      <td class="action-icons">
+        <button class="action-icon" onclick="viewSC('${sc.id}')" title="View">👁️</button>
+        ${sc.status === 'Draft' ? `<button class="action-icon" onclick="editSC('${sc.id}')" title="Edit">✏️</button>` : ''}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function filterSC() {
+  const search = document.getElementById('sc-search')?.value.toLowerCase() || '';
+  const status = document.getElementById('sc-status-filter')?.value || '';
+  const startDate = document.getElementById('sc-start-date')?.value || '';
+  const endDate = document.getElementById('sc-end-date')?.value || '';
+
+  const filtered = (AppData.stockConsumptions || []).filter(sc => {
+    const matchesSearch = !search || sc.id.toLowerCase().includes(search) || (sc.costCenter || '').toLowerCase().includes(search);
+    const matchesStatus = !status || sc.status === status;
+    const matchesStartDate = !startDate || sc.date >= startDate;
+    const matchesEndDate = !endDate || sc.date <= endDate;
+    return matchesSearch && matchesStatus && matchesStartDate && matchesEndDate;
+  });
+
+  document.querySelector('#sc-table tbody').innerHTML = renderSCRows(filtered);
+}
+
+function clearSCFilters() {
+  document.getElementById('sc-search').value = '';
+  document.getElementById('sc-status-filter').value = '';
+  document.getElementById('sc-start-date').value = '';
+  document.getElementById('sc-end-date').value = '';
+  filterSC();
+}
+
+function exportSC(type) {
+  let data;
+  if (type === 'current') {
+    const rows = document.querySelectorAll('#sc-table tbody tr');
+    data = Array.from(rows).map(row => {
+      const cells = row.querySelectorAll('td');
+      return {
+        date: cells[0]?.textContent || '',
+        scNumber: cells[1]?.textContent || '',
+        department: cells[2]?.textContent || '',
+        section: cells[3]?.textContent || '',
+        costCenter: cells[4]?.textContent || '',
+        godown: cells[5]?.textContent || '',
+        amount: cells[6]?.textContent || '',
+        createdBy: cells[7]?.textContent || '',
+        approvedBy: cells[8]?.textContent || ''
+      };
+    });
+  } else {
+    data = (AppData.stockConsumptions || []).map(sc => ({
+      date: formatDate(sc.date),
+      scNumber: sc.id,
+      department: sc.department || '-',
+      section: sc.section || '-',
+      costCenter: sc.costCenter || '-',
+      godown: sc.godown || '-',
+      amount: `₹${formatCurrency(sc.total || 0)}`,
+      createdBy: sc.createdBy || 'Admin',
+      approvedBy: sc.approvedBy || '-'
+    }));
+  }
+
+  downloadCSV(data, 'stock_consumption.csv', ['Date', 'SC Number', 'Department', 'Section', 'Cost Center', 'Godown', 'Amount', 'Created By', 'Approved By']);
+  toggleDropdown('sc-export-dropdown');
+}
+
+function openSCModal() {
+  const scNumber = generateSCNumber();
+  const scDate = new Date().toISOString().split('T')[0];
+
+  modalContent.classList.add('modal-wide');
+  modalContent.innerHTML = `
+    <div class="modal-header">
+      <h2>Stock Consumption Input Form</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="sc-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Cost Center *</label>
+            <select id="sc-cost-center" required onchange="onCostCenterSelected()">
+              <option value="">Select Cost Center...</option>
+              ${(AppData.costCenters || []).map(cc => `<option value="${cc.id}" data-dept="${cc.department}" data-section="${cc.section}">${cc.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Date *</label>
+            <input type="date" id="sc-date" value="${scDate}" required>
+          </div>
+          <div class="form-group">
+            <label>SC No</label>
+            <input type="text" id="sc-number" value="${scNumber}" readonly style="background: var(--gray-100); cursor: not-allowed;">
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>KMR</label>
+            <input type="text" id="sc-kmr" placeholder="Kilometer Reading">
+          </div>
+          <div class="form-group">
+            <label>HMR</label>
+            <input type="text" id="sc-hmr" placeholder="Hour Meter Reading">
+          </div>
+          <div class="form-group">
+            <label>Job Card No</label>
+            <input type="text" id="sc-jobcard" placeholder="Job Card Number">
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Department</label>
+            <input type="text" id="sc-department" readonly placeholder="(Auto fill from Cost Center)" style="background: var(--gray-100); cursor: not-allowed;">
+          </div>
+          <div class="form-group">
+            <label>Section</label>
+            <input type="text" id="sc-section" readonly placeholder="(Auto fill from Cost Center)" style="background: var(--gray-100); cursor: not-allowed;">
+          </div>
+          <div class="form-group">
+            <label>Godown *</label>
+            <select id="sc-godown" required>
+              <option value="">Select Godown...</option>
+              <option value="Godown A">Godown A</option>
+              <option value="Godown B">Godown B</option>
+              <option value="Godown C">Godown C</option>
+              <option value="Godown D">Godown D</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="item-lines" style="margin-top: 24px;">
+          <h4 style="margin: 0 0 16px 0;">Line Items</h4>
+          <table class="data-table" style="width: 100%; table-layout: fixed;">
+            <thead>
+              <tr>
+                <th style="width: 5%;">Sl No</th>
+                <th style="width: 25%;">Description of Goods</th>
+                <th style="width: 8%;">UoM</th>
+                <th style="width: 10%;">Qty</th>
+                <th style="width: 12%;">Rate</th>
+                <th style="width: 12%;">Amount</th>
+                <th style="width: 12%;">Rack / Bin</th>
+                <th style="width: 10%;">Remarks</th>
+                <th style="width: 6%;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="sc-lines">
+              <tr>
+                <td class="sc-sl-no" style="text-align: center;">1</td>
+                <td>
+                  <select class="sc-item" onchange="updateSCLineTotal(this)" style="width: 100%;">
+                    <option value="">Select Item</option>
+                    ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}" data-uom="${i.uom || 'NOS'}" data-rate="${i.rate || 0}">${i.name}</option>`).join('')}
+                  </select>
+                </td>
+                <td class="sc-uom" style="text-align: center;">-</td>
+                <td><input type="number" class="sc-qty" value="1" min="1" onchange="updateSCLineTotal(this)" style="width: 100%;"></td>
+                <td><input type="number" class="sc-rate" value="0" min="0" onchange="updateSCLineTotal(this)" style="width: 100%;"></td>
+                <td class="sc-amount" style="text-align: right;">₹0</td>
+                <td><input type="text" class="sc-rack" placeholder="e.g., A1-01" style="width: 100%;"></td>
+                <td><input type="text" class="sc-remarks" placeholder="Remarks" style="width: 100%;"></td>
+                <td style="text-align: center;">
+                  <button type="button" class="action-icon" onclick="editSCLine(this)" title="Edit">✏️</button>
+                  <button type="button" class="action-icon delete" onclick="removeSCLine(this)" title="Delete">🗑️</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+            <button type="button" class="btn btn-sm btn-outline" onclick="addSCLine()">+ Add New</button>
+            <div style="font-weight: 600;">
+              Total: <span id="sc-grand-total">₹0</span>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-outline" onclick="saveSC('draft')">Save As Draft</button>
+      <button class="btn btn-primary" onclick="saveSC('save')">Save Changes</button>
+    </div>
+  `;
+
+  modalOverlay.classList.remove('hidden');
+}
+
+function generateSCNumber() {
+  const year = new Date().getFullYear();
+  const existingSCs = (AppData.stockConsumptions || []).filter(sc => sc.id && sc.id.includes(year.toString()));
+  const nextNum = existingSCs.length + 1;
+  return `SC-${year}-${String(nextNum).padStart(5, '0')}`;
+}
+
+function onCostCenterSelected() {
+  const select = document.getElementById('sc-cost-center');
+  const selectedOption = select.options[select.selectedIndex];
+
+  if (selectedOption && selectedOption.value) {
+    document.getElementById('sc-department').value = selectedOption.dataset.dept || '';
+    document.getElementById('sc-section').value = selectedOption.dataset.section || '';
+  } else {
+    document.getElementById('sc-department').value = '';
+    document.getElementById('sc-section').value = '';
+  }
+}
+
+function addSCLine() {
+  const tbody = document.getElementById('sc-lines');
+  const slNo = tbody.querySelectorAll('tr').length + 1;
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td class="sc-sl-no" style="text-align: center;">${slNo}</td>
+    <td>
+      <select class="sc-item" onchange="updateSCLineTotal(this)" style="width: 100%;">
+        <option value="">Select Item</option>
+        ${AppData.items.map(i => `<option value="${i.id}" data-name="${i.name}" data-uom="${i.uom || 'NOS'}" data-rate="${i.rate || 0}">${i.name}</option>`).join('')}
+      </select>
+    </td>
+    <td class="sc-uom" style="text-align: center;">-</td>
+    <td><input type="number" class="sc-qty" value="1" min="1" onchange="updateSCLineTotal(this)" style="width: 100%;"></td>
+    <td><input type="number" class="sc-rate" value="0" min="0" onchange="updateSCLineTotal(this)" style="width: 100%;"></td>
+    <td class="sc-amount" style="text-align: right;">₹0</td>
+    <td><input type="text" class="sc-rack" placeholder="e.g., A1-01" style="width: 100%;"></td>
+    <td><input type="text" class="sc-remarks" placeholder="Remarks" style="width: 100%;"></td>
+    <td style="text-align: center;">
+      <button type="button" class="action-icon" onclick="editSCLine(this)" title="Edit">✏️</button>
+      <button type="button" class="action-icon delete" onclick="removeSCLine(this)" title="Delete">🗑️</button>
+    </td>
+  `;
+  tbody.appendChild(row);
+}
+
+function removeSCLine(btn) {
+  const row = btn.closest('tr');
+  if (document.querySelectorAll('#sc-lines tr').length > 1) {
+    row.remove();
+    renumberSCLines();
+    updateSCGrandTotal();
+  }
+}
+
+function renumberSCLines() {
+  document.querySelectorAll('#sc-lines tr').forEach((row, index) => {
+    row.querySelector('.sc-sl-no').textContent = index + 1;
+  });
+}
+
+function editSCLine(btn) {
+  const row = btn.closest('tr');
+  const inputs = row.querySelectorAll('input, select');
+  inputs.forEach(input => {
+    input.disabled = !input.disabled;
+  });
+  btn.textContent = inputs[0].disabled ? '✏️' : '✅';
+  btn.title = inputs[0].disabled ? 'Edit' : 'Done';
+}
+
+function updateSCLineTotal(el) {
+  const row = el.closest('tr');
+  const itemSelect = row.querySelector('.sc-item');
+  const selectedOption = itemSelect.options[itemSelect.selectedIndex];
+
+  if (selectedOption && selectedOption.value) {
+    row.querySelector('.sc-uom').textContent = selectedOption.dataset.uom || '-';
+    const rateInput = row.querySelector('.sc-rate');
+    if (parseFloat(rateInput.value) === 0) {
+      rateInput.value = selectedOption.dataset.rate || 0;
+    }
+  }
+
+  const qty = parseInt(row.querySelector('.sc-qty').value) || 0;
+  const rate = parseFloat(row.querySelector('.sc-rate').value) || 0;
+  const amount = qty * rate;
+
+  row.querySelector('.sc-amount').textContent = `₹${formatCurrency(amount)}`;
+  updateSCGrandTotal();
+}
+
+function updateSCGrandTotal() {
+  let total = 0;
+  document.querySelectorAll('#sc-lines tr').forEach(row => {
+    const qty = parseInt(row.querySelector('.sc-qty')?.value) || 0;
+    const rate = parseFloat(row.querySelector('.sc-rate')?.value) || 0;
+    total += qty * rate;
+  });
+  const grandTotalEl = document.getElementById('sc-grand-total');
+  if (grandTotalEl) {
+    grandTotalEl.textContent = `₹${formatCurrency(total)}`;
+  }
+}
+
+function saveSC(action = 'save') {
+  const costCenterSelect = document.getElementById('sc-cost-center');
+  const costCenter = costCenterSelect.options[costCenterSelect.selectedIndex]?.text || '';
+  const costCenterId = costCenterSelect.value;
+  const date = document.getElementById('sc-date').value;
+  const kmr = document.getElementById('sc-kmr').value;
+  const hmr = document.getElementById('sc-hmr').value;
+  const jobCardNo = document.getElementById('sc-jobcard').value;
+  const department = document.getElementById('sc-department').value;
+  const section = document.getElementById('sc-section').value;
+  const godown = document.getElementById('sc-godown').value;
+
+  if (!costCenterId) {
+    alert('Please select a Cost Center');
+    return;
+  }
+
+  if (!godown) {
+    alert('Please select a Godown');
+    return;
+  }
+
+  const items = [];
+  let total = 0;
+
+  document.querySelectorAll('#sc-lines tr').forEach(row => {
+    const itemSelect = row.querySelector('.sc-item');
+    const itemId = itemSelect.value;
+    if (itemId) {
+      const itemName = itemSelect.options[itemSelect.selectedIndex].dataset.name;
+      const uom = row.querySelector('.sc-uom').textContent;
+      const qty = parseInt(row.querySelector('.sc-qty').value) || 0;
+      const rate = parseFloat(row.querySelector('.sc-rate').value) || 0;
+      const amount = qty * rate;
+      const rack = row.querySelector('.sc-rack').value;
+      const remarks = row.querySelector('.sc-remarks').value;
+
+      items.push({ itemId, name: itemName, uom, qty, rate, amount, rack, remarks });
+      total += amount;
+    }
+  });
+
+  if (items.length === 0) {
+    alert('Please add at least one item');
+    return;
+  }
+
+  const newSC = {
+    id: document.getElementById('sc-number').value,
+    costCenter,
+    costCenterId,
+    date,
+    kmr,
+    hmr,
+    jobCardNo,
+    department,
+    section,
+    godown,
+    status: action === 'draft' ? 'Draft' : 'Posted',
+    createdBy: 'Admin',
+    approvedBy: action === 'draft' ? '' : 'Manager',
+    items,
+    total
+  };
+
+  if (!AppData.stockConsumptions) {
+    AppData.stockConsumptions = [];
+  }
+  AppData.stockConsumptions.unshift(newSC);
+
+  closeModal();
+  renderPage('stock');
+}
+
+function viewSC(scId) {
+  const sc = (AppData.stockConsumptions || []).find(s => s.id === scId);
+  if (!sc) return;
+
+  modalContent.innerHTML = `
+    <div class="modal-header">
+      <h2>Stock Consumption: ${sc.id}</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Cost Center</label>
+          <p><strong>${sc.costCenter}</strong></p>
+        </div>
+        <div class="form-group">
+          <label>Date</label>
+          <p>${formatDate(sc.date)}</p>
+        </div>
+        <div class="form-group">
+          <label>Job Card No</label>
+          <p>${sc.jobCardNo || '-'}</p>
+        </div>
+        <div class="form-group">
+          <label>Department</label>
+          <p>${sc.department || '-'}</p>
+        </div>
+        <div class="form-group">
+          <label>Section</label>
+          <p>${sc.section || '-'}</p>
+        </div>
+        <div class="form-group">
+          <label>Godown</label>
+          <p>${sc.godown || '-'}</p>
+        </div>
+        <div class="form-group">
+          <label>KMR / HMR</label>
+          <p>${sc.kmr || '-'} / ${sc.hmr || '-'}</p>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <p><span class="badge ${getStatusBadgeClass(sc.status)}">${sc.status}</span></p>
+        </div>
+      </div>
+
+      <h4 style="margin: 20px 0 12px;">Items Consumed</h4>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>UoM</th>
+            <th>Qty</th>
+            <th>Rate</th>
+            <th>Amount</th>
+            <th>Rack/Bin</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(sc.items || []).map(item => `
+            <tr>
+              <td>${item.name}</td>
+              <td>${item.uom}</td>
+              <td>${item.qty}</td>
+              <td>₹${formatCurrency(item.rate)}</td>
+              <td>₹${formatCurrency(item.amount)}</td>
+              <td>${item.rack || '-'}</td>
+              <td>${item.remarks || '-'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <div style="text-align: right; margin-top: 12px; font-weight: 600;">
+        Total: ₹${formatCurrency(sc.total)}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+    </div>
+  `;
+
+  modalOverlay.classList.remove('hidden');
+}
+
+function editSC(scId) {
+  alert('Edit functionality for SC ' + scId + ' - This would open the SC form with existing data for editing.');
 }
 
 function renderStockRows(stockItems) {
@@ -3458,8 +4279,8 @@ function renderStockRows(stockItems) {
 }
 
 function filterStock() {
-  const search = document.getElementById('stock-search').value.toLowerCase();
-  const siteId = document.getElementById('stock-site-filter').value;
+  const search = document.getElementById('stock-search')?.value.toLowerCase() || '';
+  const siteId = document.getElementById('stock-site-filter')?.value || '';
 
   const filtered = AppData.stock.filter(s => {
     const matchesSearch = !search ||
@@ -3469,7 +4290,10 @@ function filterStock() {
     return matchesSearch && matchesSite;
   });
 
-  document.querySelector('#stock-table tbody').innerHTML = renderStockRows(filtered);
+  const tbody = document.querySelector('#stock-table tbody');
+  if (tbody) {
+    tbody.innerHTML = renderStockRows(filtered);
+  }
 }
 
 // ============ MY INBOX ============

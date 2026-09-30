@@ -237,6 +237,114 @@ const AppData = {
     { id: 'WH-SOUTH', code: 'WH-SOUTH', name: 'South Zone Warehouse', type: 'Warehouse', status: 'active' }
   ],
 
+  // Cost Centers
+  costCenters: [
+    { id: 'CC-001', name: 'Volvo Tipper - VT001', department: 'Maintenance', section: 'Tipper' },
+    { id: 'CC-002', name: 'Volvo Tipper - VT002', department: 'Maintenance', section: 'Tipper' },
+    { id: 'CC-003', name: 'Komatsu Excavator - KE001', department: 'Production', section: 'Excavator' },
+    { id: 'CC-004', name: 'CAT Loader - CL001', department: 'Maintenance', section: 'Loader' },
+    { id: 'CC-005', name: 'Workshop - General', department: 'Maintenance', section: 'Tipper' },
+    { id: 'CC-006', name: 'Admin Office', department: 'HR', section: 'Tipper' }
+  ],
+
+  // Stock Consumption Records
+  stockConsumptions: [
+    {
+      id: 'SC-2026-00001',
+      costCenter: 'Volvo Tipper - VT001',
+      date: '2026-09-15',
+      kmr: '125430',
+      hmr: '4520',
+      jobCardNo: 'JC-2026-0145',
+      department: 'Maintenance',
+      section: 'Tipper',
+      godown: 'Godown A',
+      status: 'Posted',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
+      items: [
+        { itemId: 'OIL-15W40', name: 'Engine Oil 15W40', uom: 'LTR', qty: 10, rate: 350, amount: 3500, rack: 'A1-01', remarks: 'Regular service' },
+        { itemId: 'FILTER-OF', name: 'Oil Filter', uom: 'NOS', qty: 1, rate: 850, amount: 850, rack: 'A2-03', remarks: 'Replaced' }
+      ],
+      total: 4350
+    },
+    {
+      id: 'SC-2026-00002',
+      costCenter: 'Komatsu Excavator - KE001',
+      date: '2026-09-18',
+      kmr: '',
+      hmr: '8920',
+      jobCardNo: 'JC-2026-0152',
+      department: 'Production',
+      section: 'Excavator',
+      godown: 'Godown B',
+      status: 'Posted',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
+      items: [
+        { itemId: 'HSD-FUEL', name: 'HSD Fuel', uom: 'LTR', qty: 200, rate: 95, amount: 19000, rack: 'B1-01', remarks: 'Daily refuel' },
+        { itemId: 'GREASE-EP2', name: 'EP2 Grease', uom: 'KG', qty: 2, rate: 180, amount: 360, rack: 'B2-05', remarks: 'Boom greasing' }
+      ],
+      total: 19360
+    },
+    {
+      id: 'SC-2026-00003',
+      costCenter: 'CAT Loader - CL001',
+      date: '2026-09-20',
+      kmr: '45200',
+      hmr: '3150',
+      jobCardNo: 'JC-2026-0158',
+      department: 'Maintenance',
+      section: 'Loader',
+      godown: 'Godown A',
+      status: 'Draft',
+      createdBy: 'Admin',
+      approvedBy: '',
+      items: [
+        { itemId: 'BRAKE-PAD', name: 'Brake Pad Set', uom: 'SET', qty: 1, rate: 3500, amount: 3500, rack: 'A3-02', remarks: 'Front brake replacement' },
+        { itemId: 'COOLANT-10L', name: 'Radiator Coolant 10L', uom: 'NOS', qty: 1, rate: 950, amount: 950, rack: 'A2-08', remarks: 'Top up' }
+      ],
+      total: 4450
+    },
+    {
+      id: 'SC-2026-00004',
+      costCenter: 'Volvo Tipper - VT002',
+      date: '2026-09-22',
+      kmr: '98750',
+      hmr: '3890',
+      jobCardNo: 'JC-2026-0165',
+      department: 'Maintenance',
+      section: 'Tipper',
+      godown: 'Godown C',
+      status: 'Posted',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
+      items: [
+        { itemId: 'TYRE-295', name: 'Tyre 295/80R22.5', uom: 'NOS', qty: 2, rate: 15000, amount: 30000, rack: 'C1-01', remarks: 'Rear tyres replaced' }
+      ],
+      total: 30000
+    },
+    {
+      id: 'SC-2026-00005',
+      costCenter: 'Workshop - General',
+      date: '2026-09-25',
+      kmr: '',
+      hmr: '',
+      jobCardNo: 'JC-2026-0172',
+      department: 'Maintenance',
+      section: 'Tipper',
+      godown: 'Godown A',
+      status: 'Posted',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
+      items: [
+        { itemId: 'BOLT-M12', name: 'Hex Bolt M12x50', uom: 'NOS', qty: 50, rate: 25, amount: 1250, rack: 'A4-01', remarks: 'General stock' },
+        { itemId: 'BELT-FAN', name: 'Fan Belt', uom: 'NOS', qty: 3, rate: 650, amount: 1950, rack: 'A3-05', remarks: 'Spare stock' }
+      ],
+      total: 3200
+    }
+  ],
+
   // Purchase Orders
   purchaseOrders: [
     {
@@ -245,12 +353,16 @@ const AppData = {
       vendorName: 'Acme Auto Parts',
       siteId: 'SITE-B',
       siteName: 'Site B - Delhi',
+      department: 'Maintenance',
+      section: 'Tipper',
       date: '2026-07-15',
       status: 'Completed',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'TYRE-295', name: 'Tyre 295/80R22.5', qty: 10, rate: 15000, total: 150000, received: 10 }
+        { itemId: 'TYRE-295', name: 'Tyre 295/80R22.5', uom: 'NOS', qty: 10, rate: 15000, disc: 0, taxableAmount: 150000, cgst: 9, sgst: 9, igst: 0, total: 177000, received: 10 }
       ],
-      total: 150000
+      total: 177000
     },
     {
       id: 'PO-2026-00002',
@@ -258,13 +370,17 @@ const AppData = {
       vendorName: 'Fuel & Lube Suppliers',
       siteId: 'SITE-A',
       siteName: 'Site A - Mumbai',
+      department: 'Production',
+      section: 'Excavator',
       date: '2026-07-20',
       status: 'Partially Received',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'OIL-15W40', name: 'Engine Oil 15W40', qty: 200, rate: 350, total: 70000, received: 80 },
-        { itemId: 'HSD-FUEL', name: 'HSD Fuel', qty: 1000, rate: 95, total: 95000, received: 500 }
+        { itemId: 'OIL-15W40', name: 'Engine Oil 15W40', uom: 'LTR', qty: 200, rate: 350, disc: 0, taxableAmount: 70000, cgst: 9, sgst: 9, igst: 0, total: 82600, received: 80 },
+        { itemId: 'HSD-FUEL', name: 'HSD Fuel', uom: 'LTR', qty: 1000, rate: 95, disc: 0, taxableAmount: 95000, cgst: 9, sgst: 9, igst: 0, total: 112100, received: 500 }
       ],
-      total: 165000
+      total: 194700
     },
     {
       id: 'PO-2026-00003',
@@ -272,13 +388,17 @@ const AppData = {
       vendorName: 'Local Hardware Store',
       siteId: 'WH-CENTRAL',
       siteName: 'Central Warehouse',
+      department: 'Maintenance',
+      section: 'Loader',
       date: '2026-07-25',
       status: 'Open',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'FILTER-OF', name: 'Oil Filter', qty: 50, rate: 850, total: 42500, received: 0 },
-        { itemId: 'FILTER-AF', name: 'Air Filter', qty: 30, rate: 1200, total: 36000, received: 0 }
+        { itemId: 'FILTER-OF', name: 'Oil Filter', uom: 'NOS', qty: 50, rate: 850, disc: 0, taxableAmount: 42500, cgst: 9, sgst: 9, igst: 0, total: 50150, received: 0 },
+        { itemId: 'FILTER-AF', name: 'Air Filter', uom: 'NOS', qty: 30, rate: 1200, disc: 0, taxableAmount: 36000, cgst: 9, sgst: 9, igst: 0, total: 42480, received: 0 }
       ],
-      total: 78500
+      total: 92630
     },
     {
       id: 'PO-2026-00004',
@@ -286,12 +406,16 @@ const AppData = {
       vendorName: 'MRF Tyres Ltd',
       siteId: 'SITE-C',
       siteName: 'Site C - Chennai',
+      department: 'Maintenance',
+      section: 'Tipper',
       date: '2026-08-01',
       status: 'Open',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'TYRE-295', name: 'Tyre 295/80R22.5', qty: 20, rate: 14500, total: 290000, received: 0 }
+        { itemId: 'TYRE-295', name: 'Tyre 295/80R22.5', uom: 'NOS', qty: 20, rate: 14500, disc: 0, taxableAmount: 290000, cgst: 9, sgst: 9, igst: 0, total: 342200, received: 0 }
       ],
-      total: 290000
+      total: 342200
     },
     {
       id: 'PO-2026-00005',
@@ -299,14 +423,18 @@ const AppData = {
       vendorName: 'Castrol India',
       siteId: 'WH-NORTH',
       siteName: 'North Zone Warehouse',
+      department: 'Production',
+      section: 'Excavator',
       date: '2026-08-02',
       status: 'Open',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'OIL-15W40', name: 'Engine Oil 15W40', qty: 500, rate: 340, total: 170000, received: 0 },
-        { itemId: 'GREASE-EP2', name: 'EP2 Grease', qty: 100, rate: 175, total: 17500, received: 0 },
-        { itemId: 'COOLANT-10L', name: 'Radiator Coolant 10L', qty: 50, rate: 920, total: 46000, received: 0 }
+        { itemId: 'OIL-15W40', name: 'Engine Oil 15W40', uom: 'LTR', qty: 500, rate: 340, disc: 0, taxableAmount: 170000, cgst: 9, sgst: 9, igst: 0, total: 200600, received: 0 },
+        { itemId: 'GREASE-EP2', name: 'EP2 Grease', uom: 'KG', qty: 100, rate: 175, disc: 0, taxableAmount: 17500, cgst: 9, sgst: 9, igst: 0, total: 20650, received: 0 },
+        { itemId: 'COOLANT-10L', name: 'Radiator Coolant 10L', uom: 'NOS', qty: 50, rate: 920, disc: 0, taxableAmount: 46000, cgst: 9, sgst: 9, igst: 0, total: 54280, received: 0 }
       ],
-      total: 233500
+      total: 275530
     },
     {
       id: 'PO-2026-00006',
@@ -314,14 +442,18 @@ const AppData = {
       vendorName: 'Bosch Automotive',
       siteId: 'SITE-E',
       siteName: 'Site E - Bangalore',
+      department: 'Maintenance',
+      section: 'Loader',
       date: '2026-08-03',
       status: 'Partially Received',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'FILTER-OF', name: 'Oil Filter', qty: 100, rate: 820, total: 82000, received: 40 },
-        { itemId: 'FILTER-AF', name: 'Air Filter', qty: 80, rate: 1150, total: 92000, received: 30 },
-        { itemId: 'BRAKE-PAD', name: 'Brake Pad Set', qty: 20, rate: 3400, total: 68000, received: 10 }
+        { itemId: 'FILTER-OF', name: 'Oil Filter', uom: 'NOS', qty: 100, rate: 820, disc: 0, taxableAmount: 82000, cgst: 9, sgst: 9, igst: 0, total: 96760, received: 40 },
+        { itemId: 'FILTER-AF', name: 'Air Filter', uom: 'NOS', qty: 80, rate: 1150, disc: 0, taxableAmount: 92000, cgst: 9, sgst: 9, igst: 0, total: 108560, received: 30 },
+        { itemId: 'BRAKE-PAD', name: 'Brake Pad Set', uom: 'SET', qty: 20, rate: 3400, disc: 0, taxableAmount: 68000, cgst: 9, sgst: 9, igst: 0, total: 80240, received: 10 }
       ],
-      total: 242000
+      total: 285560
     },
     {
       id: 'PO-2026-00007',
@@ -329,12 +461,16 @@ const AppData = {
       vendorName: 'Indian Oil Corporation',
       siteId: 'SITE-A',
       siteName: 'Site A - Mumbai',
+      department: 'Production',
+      section: 'Tipper',
       date: '2026-08-05',
       status: 'Open',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'HSD-FUEL', name: 'HSD Fuel', qty: 5000, rate: 92, total: 460000, received: 0 }
+        { itemId: 'HSD-FUEL', name: 'HSD Fuel', uom: 'LTR', qty: 5000, rate: 92, disc: 0, taxableAmount: 460000, cgst: 9, sgst: 9, igst: 0, total: 542800, received: 0 }
       ],
-      total: 460000
+      total: 542800
     },
     {
       id: 'PO-2026-00008',
@@ -342,14 +478,18 @@ const AppData = {
       vendorName: 'Tata AutoComp',
       siteId: 'WH-SOUTH',
       siteName: 'South Zone Warehouse',
+      department: 'Maintenance',
+      section: 'Excavator',
       date: '2026-08-06',
       status: 'Open',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'BRAKE-PAD', name: 'Brake Pad Set', qty: 50, rate: 3450, total: 172500, received: 0 },
-        { itemId: 'BELT-FAN', name: 'Fan Belt', qty: 30, rate: 640, total: 19200, received: 0 },
-        { itemId: 'COOLANT-10L', name: 'Radiator Coolant 10L', qty: 25, rate: 940, total: 23500, received: 0 }
+        { itemId: 'BRAKE-PAD', name: 'Brake Pad Set', uom: 'SET', qty: 50, rate: 3450, disc: 0, taxableAmount: 172500, cgst: 9, sgst: 9, igst: 0, total: 203550, received: 0 },
+        { itemId: 'BELT-FAN', name: 'Fan Belt', uom: 'NOS', qty: 30, rate: 640, disc: 0, taxableAmount: 19200, cgst: 9, sgst: 9, igst: 0, total: 22656, received: 0 },
+        { itemId: 'COOLANT-10L', name: 'Radiator Coolant 10L', uom: 'NOS', qty: 25, rate: 940, disc: 0, taxableAmount: 23500, cgst: 9, sgst: 9, igst: 0, total: 27730, received: 0 }
       ],
-      total: 215200
+      total: 253936
     },
     {
       id: 'PO-2026-00009',
@@ -357,12 +497,16 @@ const AppData = {
       vendorName: 'Apollo Tyres',
       siteId: 'SITE-D',
       siteName: 'Site D - Kolkata',
+      department: 'Maintenance',
+      section: 'Tipper',
       date: '2026-08-07',
       status: 'Open',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'TYRE-295', name: 'Tyre 295/80R22.5', qty: 16, rate: 14800, total: 236800, received: 0 }
+        { itemId: 'TYRE-295', name: 'Tyre 295/80R22.5', uom: 'NOS', qty: 16, rate: 14800, disc: 0, taxableAmount: 236800, cgst: 9, sgst: 9, igst: 0, total: 279424, received: 0 }
       ],
-      total: 236800
+      total: 279424
     },
     {
       id: 'PO-2026-00010',
@@ -370,14 +514,18 @@ const AppData = {
       vendorName: 'Bharat Petroleum',
       siteId: 'SITE-B',
       siteName: 'Site B - Delhi',
+      department: 'Production',
+      section: 'Loader',
       date: '2026-08-08',
       status: 'Partially Received',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'HSD-FUEL', name: 'HSD Fuel', qty: 3000, rate: 93, total: 279000, received: 1500 },
-        { itemId: 'OIL-15W40', name: 'Engine Oil 15W40', qty: 100, rate: 345, total: 34500, received: 50 },
-        { itemId: 'GREASE-EP2', name: 'EP2 Grease', qty: 50, rate: 178, total: 8900, received: 25 }
+        { itemId: 'HSD-FUEL', name: 'HSD Fuel', uom: 'LTR', qty: 3000, rate: 93, disc: 0, taxableAmount: 279000, cgst: 9, sgst: 9, igst: 0, total: 329220, received: 1500 },
+        { itemId: 'OIL-15W40', name: 'Engine Oil 15W40', uom: 'LTR', qty: 100, rate: 345, disc: 0, taxableAmount: 34500, cgst: 9, sgst: 9, igst: 0, total: 40710, received: 50 },
+        { itemId: 'GREASE-EP2', name: 'EP2 Grease', uom: 'KG', qty: 50, rate: 178, disc: 0, taxableAmount: 8900, cgst: 9, sgst: 9, igst: 0, total: 10502, received: 25 }
       ],
-      total: 322400
+      total: 380432
     },
     {
       id: 'PO-2026-00011',
@@ -385,12 +533,16 @@ const AppData = {
       vendorName: 'Sundaram Fasteners',
       siteId: 'WH-CENTRAL',
       siteName: 'Central Warehouse',
+      department: 'Maintenance',
+      section: 'Tipper',
       date: '2026-08-10',
       status: 'Open',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'BOLT-M12', name: 'Hex Bolt M12x50', qty: 500, rate: 24, total: 12000, received: 0 }
+        { itemId: 'BOLT-M12', name: 'Hex Bolt M12x50', uom: 'NOS', qty: 500, rate: 24, disc: 0, taxableAmount: 12000, cgst: 9, sgst: 9, igst: 0, total: 14160, received: 0 }
       ],
-      total: 12000
+      total: 14160
     },
     {
       id: 'PO-2026-00012',
@@ -398,13 +550,17 @@ const AppData = {
       vendorName: 'Acme Auto Parts',
       siteId: 'SITE-A',
       siteName: 'Site A - Mumbai',
+      department: 'Maintenance',
+      section: 'Loader',
       date: '2026-08-12',
       status: 'Open',
+      createdBy: 'Admin',
+      approvedBy: 'Manager',
       items: [
-        { itemId: 'TYRE-295', name: 'Tyre 295/80R22.5', qty: 8, rate: 15000, total: 120000, received: 0 },
-        { itemId: 'BRAKE-PAD', name: 'Brake Pad Set', qty: 10, rate: 3500, total: 35000, received: 0 }
+        { itemId: 'TYRE-295', name: 'Tyre 295/80R22.5', uom: 'NOS', qty: 8, rate: 15000, disc: 0, taxableAmount: 120000, cgst: 9, sgst: 9, igst: 0, total: 141600, received: 0 },
+        { itemId: 'BRAKE-PAD', name: 'Brake Pad Set', uom: 'SET', qty: 10, rate: 3500, disc: 0, taxableAmount: 35000, cgst: 9, sgst: 9, igst: 0, total: 41300, received: 0 }
       ],
-      total: 155000
+      total: 182900
     }
   ],
 
@@ -413,29 +569,83 @@ const AppData = {
     {
       id: 'GRN-2026-00001',
       poId: 'PO-2026-00001',
+      vendorId: 'VND-001',
       vendorName: 'Acme Auto Parts',
       siteId: 'SITE-B',
       siteName: 'Site B',
+      department: 'Maintenance',
+      section: 'Tipper',
+      godown: 'Godown A',
       challanNo: 'DC-2026-789',
       date: '2026-07-18',
       status: 'Posted',
+      createdBy: 'Admin',
       items: [
-        { itemId: 'TYRE-295', name: 'Tyre 295/80R22.5', ordered: 10, previouslyReceived: 0, received: 10, balance: 0 }
-      ]
+        { itemId: 'TYRE-295', name: 'Tyre 295/80R22.5', uom: 'NOS', qty: 10, rate: 15000, disc: 0, taxableAmount: 150000, cgst: 9, sgst: 9, igst: 0, total: 177000, rack: 'A1-01', poId: 'PO-2026-00001' }
+      ],
+      total: 177000
     },
     {
       id: 'GRN-2026-00002',
       poId: 'PO-2026-00002',
+      vendorId: 'VND-003',
       vendorName: 'Fuel & Lube Suppliers',
       siteId: 'SITE-A',
       siteName: 'Site A',
+      department: 'Production',
+      section: 'Excavator',
+      godown: 'Godown B',
       challanNo: 'DC-2026-801',
       date: '2026-07-22',
       status: 'Posted',
+      createdBy: 'Admin',
       items: [
-        { itemId: 'OIL-15W40', name: 'Engine Oil 15W40', ordered: 200, previouslyReceived: 0, received: 80, balance: 120 },
-        { itemId: 'HSD-FUEL', name: 'HSD Fuel', ordered: 1000, previouslyReceived: 0, received: 500, balance: 500 }
-      ]
+        { itemId: 'OIL-15W40', name: 'Engine Oil 15W40', uom: 'LTR', qty: 80, rate: 350, disc: 0, taxableAmount: 28000, cgst: 9, sgst: 9, igst: 0, total: 33040, rack: 'B2-01', poId: 'PO-2026-00002' },
+        { itemId: 'HSD-FUEL', name: 'HSD Fuel', uom: 'LTR', qty: 500, rate: 95, disc: 0, taxableAmount: 47500, cgst: 9, sgst: 9, igst: 0, total: 56050, rack: 'B1-01', poId: 'PO-2026-00002' }
+      ],
+      total: 89090
+    },
+    {
+      id: 'GRN-2026-00003',
+      poId: 'PO-2026-00006',
+      vendorId: 'VND-007',
+      vendorName: 'Bosch Automotive',
+      siteId: 'SITE-E',
+      siteName: 'Site E - Bangalore',
+      department: 'Maintenance',
+      section: 'Loader',
+      godown: 'Godown C',
+      challanNo: 'DC-2026-892',
+      date: '2026-08-10',
+      status: 'Posted',
+      createdBy: 'Admin',
+      items: [
+        { itemId: 'FILTER-OF', name: 'Oil Filter', uom: 'NOS', qty: 40, rate: 820, disc: 0, taxableAmount: 32800, cgst: 9, sgst: 9, igst: 0, total: 38704, rack: 'C2-03', poId: 'PO-2026-00006' },
+        { itemId: 'FILTER-AF', name: 'Air Filter', uom: 'NOS', qty: 30, rate: 1150, disc: 0, taxableAmount: 34500, cgst: 9, sgst: 9, igst: 0, total: 40710, rack: 'C2-04', poId: 'PO-2026-00006' },
+        { itemId: 'BRAKE-PAD', name: 'Brake Pad Set', uom: 'SET', qty: 10, rate: 3400, disc: 0, taxableAmount: 34000, cgst: 9, sgst: 9, igst: 0, total: 40120, rack: 'C3-01', poId: 'PO-2026-00006' }
+      ],
+      total: 119534
+    },
+    {
+      id: 'GRN-2026-00004',
+      poId: 'PO-2026-00010',
+      vendorId: 'VND-011',
+      vendorName: 'Bharat Petroleum',
+      siteId: 'SITE-B',
+      siteName: 'Site B - Delhi',
+      department: 'Production',
+      section: 'Loader',
+      godown: 'Godown D',
+      challanNo: 'DC-2026-915',
+      date: '2026-08-15',
+      status: 'Posted',
+      createdBy: 'Admin',
+      items: [
+        { itemId: 'HSD-FUEL', name: 'HSD Fuel', uom: 'LTR', qty: 1500, rate: 93, disc: 0, taxableAmount: 139500, cgst: 9, sgst: 9, igst: 0, total: 164610, rack: 'D1-01', poId: 'PO-2026-00010' },
+        { itemId: 'OIL-15W40', name: 'Engine Oil 15W40', uom: 'LTR', qty: 50, rate: 345, disc: 0, taxableAmount: 17250, cgst: 9, sgst: 9, igst: 0, total: 20355, rack: 'D2-01', poId: 'PO-2026-00010' },
+        { itemId: 'GREASE-EP2', name: 'EP2 Grease', uom: 'KG', qty: 25, rate: 178, disc: 0, taxableAmount: 4450, cgst: 9, sgst: 9, igst: 0, total: 5251, rack: 'D2-03', poId: 'PO-2026-00010' }
+      ],
+      total: 190216
     }
   ],
 
