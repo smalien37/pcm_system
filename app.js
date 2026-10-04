@@ -15,9 +15,12 @@ const modalOverlay = document.getElementById('modal-overlay');
 const modalContent = document.getElementById('modal-content');
 
 // Initialize App
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   setupPasswordToggle();
+
+  // Load data from API
+  await loadAppData();
 
   // Check if already logged in (for demo)
   if (sessionStorage.getItem('loggedIn')) {
@@ -331,35 +334,31 @@ function waitForNavKey() {
 // Auth Handlers
 const ALL_SITES = ['SITE-A', 'SITE-B', 'SITE-C', 'SITE-D', 'SITE-E', 'WH-CENTRAL', 'WH-NORTH', 'WH-SOUTH'];
 
-const VALID_CREDENTIALS = [
-  { email: 'superadmin@pms.local', password: 'Demo@2026', name: 'Super Admin', role: 'Super Admin', sites: ALL_SITES },
-  { email: 'admin@synesisconsulting.app', password: 'Demo@2026', name: 'System Admin', role: 'Administrator', sites: ['SITE-A', 'SITE-B', 'SITE-C', 'WH-CENTRAL'] },
-  { email: 'demo@synesisconsulting.app', password: 'Demo@2026', name: 'Demo User', role: 'Viewer', sites: ['SITE-A', 'SITE-B', 'WH-CENTRAL'] },
-  { email: 'finance@pms.local', password: 'Demo@2026', name: 'Fiona Finance', role: 'Finance', sites: ['WH-CENTRAL', 'WH-NORTH', 'WH-SOUTH'] },
-  { email: 'store@pms.local', password: 'Demo@2026', name: 'Sam Store', role: 'Store Keeper', sites: ['SITE-A', 'WH-CENTRAL'] },
-  { email: 'executive@pms.local', password: 'Demo@2026', name: 'Evan Exec', role: 'Purchase Executive', sites: ['SITE-A', 'SITE-B', 'SITE-C'] },
-  { email: 'purchase@pms.local', password: 'Demo@2026', name: 'Priya Purchase', role: 'Purchase Manager', sites: ['SITE-A', 'SITE-B', 'SITE-C', 'WH-CENTRAL', 'WH-NORTH'] },
-  { email: 'super@pms.local', password: 'Demo@2026', name: 'Super User', role: 'Super Admin', sites: ALL_SITES },
-];
-
-let currentUser = null;
-
-function handleLogin(e) {
+async function handleLogin(e) {
   e.preventDefault();
   const email = document.getElementById('email').value.trim().toLowerCase();
   const password = document.getElementById('password').value;
 
-  const user = VALID_CREDENTIALS.find(
-    cred => cred.email.toLowerCase() === email && cred.password === password
-  );
+  try {
+    const response = await API.auth.login(email, password);
 
-  if (user) {
-    currentUser = user;
-    sessionStorage.setItem('loggedIn', 'true');
-    sessionStorage.setItem('currentUser', JSON.stringify(user));
-    showMainApp();
-  } else {
-    alert('Invalid email or password. Please try again.');
+    if (response.success && response.user) {
+      currentUser = {
+        id: response.user.id,
+        email: response.user.email,
+        name: response.user.name,
+        role: response.user.role,
+        sites: ALL_SITES
+      };
+      sessionStorage.setItem('loggedIn', 'true');
+      sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
+      await showMainApp();
+    } else {
+      alert(response.message || 'Invalid email or password. Please try again.');
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    alert('Login failed. Please check your connection and try again.');
   }
 }
 
@@ -371,13 +370,18 @@ function handleLogout() {
   loginScreen.classList.remove('hidden');
 }
 
-function showMainApp() {
+async function showMainApp() {
   // Restore user from session if page was refreshed
   if (!currentUser) {
     const storedUser = sessionStorage.getItem('currentUser');
     if (storedUser) {
       currentUser = JSON.parse(storedUser);
     }
+  }
+
+  // Ensure data is loaded from API
+  if (!dataLoaded) {
+    await loadAppData();
   }
 
   loginScreen.classList.add('hidden');
@@ -1123,11 +1127,13 @@ function openVendorModal(vendorId = null) {
           </div>
           <div class="form-group">
             <label>Primary Category</label>
-            <select id="vendor-category">
+            <select id="vendor-category" onchange="toggleNewVendorCategoryInput()">
               ${AppData.vendorCategories.map(cat =>
                 `<option value="${cat}" ${vendor?.category === cat ? 'selected' : ''}>${cat}</option>`
               ).join('')}
+              <option value="__new__">+ Add New Category...</option>
             </select>
+            <input type="text" id="vendor-category-new" class="hidden" placeholder="Enter new category name" style="margin-top: 8px;">
           </div>
           <div class="form-group full-width">
             <label>Address</label>
@@ -1211,11 +1217,24 @@ function updateVendorItemsFromSubGroups() {
   });
 }
 
-function saveVendor(vendorId) {
+function toggleNewVendorCategoryInput() {
+  const select = document.getElementById('vendor-category');
+  const newInput = document.getElementById('vendor-category-new');
+  if (select.value === '__new__') {
+    newInput.classList.remove('hidden');
+    newInput.focus();
+  } else {
+    newInput.classList.add('hidden');
+    newInput.value = '';
+  }
+}
+
+async function saveVendor(vendorId) {
   const name = document.getElementById('vendor-name').value;
   const email = document.getElementById('vendor-email').value;
   const phone = document.getElementById('vendor-phone').value;
-  const category = document.getElementById('vendor-category').value;
+  let category = document.getElementById('vendor-category').value;
+  const newCategoryName = document.getElementById('vendor-category-new').value.trim();
   const address = document.getElementById('vendor-address').value;
 
   // Get selected sub groups
@@ -1231,44 +1250,60 @@ function saveVendor(vendorId) {
     return;
   }
 
-  if (vendorId) {
-    // Update existing
-    const idx = AppData.vendors.findIndex(v => v.id === vendorId);
-    if (idx !== -1) {
-      AppData.vendors[idx] = {
-        ...AppData.vendors[idx],
-        name, contact: email, phone, category, categories: [category], address, subGroups, itemIds
-      };
+  if (category === '__new__' && !newCategoryName) {
+    alert('Please enter a name for the new category');
+    return;
+  }
+
+  try {
+    if (category === '__new__' && newCategoryName) {
+      await API.lookups.createVendorCategory(newCategoryName);
+      AppData.vendorCategories.push(newCategoryName);
+      category = newCategoryName;
     }
-  } else {
-    // Create new
-    const newVendor = {
-      id: generateId('VND'),
+
+    const vendorData = {
+      id: vendorId || generateId('VND'),
       name,
       contact: email,
       phone,
-      category,
-      categories: [category],
       address,
-      subGroups,
-      itemIds,
-      status: 'active'
+      primary_category: category,
+      status: 'active',
+      categories: [category],
+      subgroups: subGroups,
+      item_ids: itemIds
     };
-    AppData.vendors.push(newVendor);
-  }
 
-  closeModal();
-  renderPage('vendors');
+    if (vendorId) {
+      await API.vendors.update(vendorId, vendorData);
+    } else {
+      await API.vendors.create(vendorData);
+    }
+
+    await refreshVendors();
+    closeModal();
+    renderPage('vendors');
+  } catch (error) {
+    console.error('Error saving vendor:', error);
+    alert('Failed to save vendor. Please try again.');
+  }
 }
 
 function editVendor(id) {
   openVendorModal(id);
 }
 
-function deleteVendor(id) {
+async function deleteVendor(id) {
   if (confirm('Are you sure you want to delete this vendor?')) {
-    AppData.vendors = AppData.vendors.filter(v => v.id !== id);
-    renderPage('vendors');
+    try {
+      await API.vendors.delete(id);
+      await refreshVendors();
+      renderPage('vendors');
+    } catch (error) {
+      console.error('Error deleting vendor:', error);
+      alert('Failed to delete vendor. Please try again.');
+    }
   }
 }
 
@@ -1418,11 +1453,13 @@ function openItemModal(itemId = null) {
           </div>
           <div class="form-group">
             <label>Category</label>
-            <select id="item-category">
+            <select id="item-category" onchange="toggleNewCategoryInput()">
               ${AppData.itemCategories.map(cat =>
                 `<option value="${cat}" ${item?.category === cat ? 'selected' : ''}>${cat}</option>`
               ).join('')}
+              <option value="__new__">+ Add New Category...</option>
             </select>
+            <input type="text" id="item-category-new" class="hidden" placeholder="Enter new category name" style="margin-top: 8px;">
           </div>
           <div class="form-group">
             <label>Sub Group</label>
@@ -1447,7 +1484,6 @@ function openItemModal(itemId = null) {
               <option value="-" ${item?.tracking === '-' ? 'selected' : ''}>None</option>
               <option value="Batch" ${item?.tracking === 'Batch' ? 'selected' : ''}>Batch</option>
               <option value="Serial" ${item?.tracking === 'Serial' ? 'selected' : ''}>Serial</option>
-              <option value="Batch, Serial" ${item?.tracking === 'Batch, Serial' ? 'selected' : ''}>Batch & Serial</option>
             </select>
           </div>
         </div>
@@ -1462,11 +1498,24 @@ function openItemModal(itemId = null) {
   modalOverlay.classList.remove('hidden');
 }
 
-function saveItem(itemId) {
+function toggleNewCategoryInput() {
+  const select = document.getElementById('item-category');
+  const newInput = document.getElementById('item-category-new');
+  if (select.value === '__new__') {
+    newInput.classList.remove('hidden');
+    newInput.focus();
+  } else {
+    newInput.classList.add('hidden');
+    newInput.value = '';
+  }
+}
+
+async function saveItem(itemId) {
   const sku = document.getElementById('item-sku').value;
   const name = document.getElementById('item-name').value;
   const uom = document.getElementById('item-uom').value;
-  const category = document.getElementById('item-category').value;
+  let category = document.getElementById('item-category').value;
+  const newCategoryName = document.getElementById('item-category-new').value.trim();
   const subGroup = document.getElementById('item-subgroup').value;
   const rate = parseFloat(document.getElementById('item-rate').value) || 0;
   const reorder = parseInt(document.getElementById('item-reorder').value) || 0;
@@ -1477,38 +1526,65 @@ function saveItem(itemId) {
     return;
   }
 
-  if (itemId) {
-    const idx = AppData.items.findIndex(i => i.id === itemId);
-    if (idx !== -1) {
-      AppData.items[idx] = { ...AppData.items[idx], sku, name, uom, category, subGroup, rate, reorder, tracking };
+  if (category === '__new__' && !newCategoryName) {
+    alert('Please enter a name for the new category');
+    return;
+  }
+
+  try {
+    let categoryObj = null;
+
+    if (category === '__new__' && newCategoryName) {
+      categoryObj = await API.lookups.createItemCategory(newCategoryName);
+      AppData.itemCategories.push(newCategoryName);
+      category = newCategoryName;
+    } else {
+      categoryObj = AppData.itemCategories.includes(category) ?
+        (await API.lookups.getItemCategories()).find(c => c.name === category) : null;
     }
-  } else {
-    AppData.items.push({
-      id: sku,
+
+    const itemData = {
+      id: itemId || sku,
       sku,
       name,
       uom,
-      category,
-      subGroup,
+      category_id: categoryObj?.id || null,
+      subgroup_id: subGroup || null,
       rate,
-      reorder,
+      reorder_level: reorder,
       tracking,
       status: 'active'
-    });
-  }
+    };
 
-  closeModal();
-  renderPage('items');
+    if (itemId) {
+      await API.items.update(itemId, itemData);
+    } else {
+      await API.items.create(itemData);
+    }
+
+    await refreshItems();
+    closeModal();
+    renderPage('items');
+  } catch (error) {
+    console.error('Error saving item:', error);
+    alert('Failed to save item. Please try again.');
+  }
 }
 
 function editItem(id) {
   openItemModal(id);
 }
 
-function deleteItem(id) {
+async function deleteItem(id) {
   if (confirm('Are you sure you want to delete this item?')) {
-    AppData.items = AppData.items.filter(i => i.id !== id);
-    renderPage('items');
+    try {
+      await API.items.delete(id);
+      await refreshItems();
+      renderPage('items');
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      alert('Failed to delete item. Please try again.');
+    }
   }
 }
 
@@ -1595,7 +1671,7 @@ function hideAddSubGroupForm() {
   document.getElementById('add-subgroup-form').classList.add('hidden');
 }
 
-function saveSubGroup() {
+async function saveSubGroup() {
   const nameInput = document.getElementById('subgroup-name');
   const descInput = document.getElementById('subgroup-description');
   const name = nameInput.value.trim();
@@ -1607,29 +1683,34 @@ function saveSubGroup() {
     return;
   }
 
-  if (editId) {
-    // Update existing
-    const idx = AppData.itemSubGroups.findIndex(sg => sg.id === editId);
-    if (idx !== -1) {
-      AppData.itemSubGroups[idx].name = name;
-      AppData.itemSubGroups[idx].description = description;
-    }
-  } else {
-    // Create new
-    const id = 'SG-' + name.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
+  try {
+    if (editId) {
+      // For now, update locally (API doesn't have update endpoint for subgroups)
+      const idx = AppData.itemSubGroups.findIndex(sg => sg.id === editId);
+      if (idx !== -1) {
+        AppData.itemSubGroups[idx].name = name;
+        AppData.itemSubGroups[idx].description = description;
+      }
+    } else {
+      const id = 'SG-' + name.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
 
-    // Check if ID already exists
-    if (AppData.itemSubGroups.some(sg => sg.id === id)) {
-      alert('A sub group with a similar name already exists');
-      return;
+      if (AppData.itemSubGroups.some(sg => sg.id === id)) {
+        alert('A sub group with a similar name already exists');
+        return;
+      }
+
+      await API.lookups.getItemSubgroups().then(async () => {
+        await API.post('/lookups/item-subgroups', { id, name, description });
+      });
+      await refreshLookups();
     }
 
-    AppData.itemSubGroups.push({ id, name, description });
+    document.getElementById('subgroups-table-body').innerHTML = renderSubGroupRows();
+    hideAddSubGroupForm();
+  } catch (error) {
+    console.error('Error saving sub group:', error);
+    alert('Failed to save sub group. Please try again.');
   }
-
-  // Refresh the table
-  document.getElementById('subgroups-table-body').innerHTML = renderSubGroupRows();
-  hideAddSubGroupForm();
 }
 
 function editSubGroup(id) {
@@ -1927,21 +2008,21 @@ function openPOModal() {
         <div class="form-grid">
           <div class="form-group">
             <label>Department *</label>
-            <select id="po-department" required>
+            <select id="po-department" required onchange="toggleNewDepartmentInput()">
               <option value="">Select Department</option>
-              <option value="Maintenance">Maintenance</option>
-              <option value="Production">Production</option>
-              <option value="HR">HR</option>
+              ${AppData.departments.map(d => `<option value="${d.name}">${d.name}</option>`).join('')}
+              <option value="__new__">+ Add New Department...</option>
             </select>
+            <input type="text" id="po-department-new" class="hidden" placeholder="Enter new department name" style="margin-top: 8px;">
           </div>
           <div class="form-group">
             <label>Section *</label>
-            <select id="po-section" required>
+            <select id="po-section" required onchange="toggleNewSectionInput()">
               <option value="">Select Section</option>
-              <option value="Tipper">Tipper</option>
-              <option value="Excavator">Excavator</option>
-              <option value="Loader">Loader</option>
+              ${AppData.sections.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
+              <option value="__new__">+ Add New Section...</option>
             </select>
+            <input type="text" id="po-section-new" class="hidden" placeholder="Enter new section name" style="margin-top: 8px;">
           </div>
         </div>
 
@@ -2164,9 +2245,11 @@ function openOnTheFlyItemModal() {
             </div>
             <div class="form-group">
               <label>Category</label>
-              <select id="otf-item-category">
+              <select id="otf-item-category" onchange="toggleOtfNewCategoryInput()">
                 ${AppData.itemCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
+                <option value="__new__">+ Add New Category...</option>
               </select>
+              <input type="text" id="otf-item-category-new" class="hidden" placeholder="Enter new category name" style="margin-top: 8px;">
             </div>
             <div class="form-group">
               <label>Sub Group</label>
@@ -2198,16 +2281,34 @@ function closeOnTheFlyItemModal() {
   }
 }
 
-function saveOnTheFlyItem() {
+function toggleOtfNewCategoryInput() {
+  const select = document.getElementById('otf-item-category');
+  const newInput = document.getElementById('otf-item-category-new');
+  if (select.value === '__new__') {
+    newInput.classList.remove('hidden');
+    newInput.focus();
+  } else {
+    newInput.classList.add('hidden');
+    newInput.value = '';
+  }
+}
+
+async function saveOnTheFlyItem() {
   const sku = document.getElementById('otf-item-sku').value.trim();
   const name = document.getElementById('otf-item-name').value.trim();
   const uom = document.getElementById('otf-item-uom').value;
-  const category = document.getElementById('otf-item-category').value;
+  let category = document.getElementById('otf-item-category').value;
+  const newCategoryName = document.getElementById('otf-item-category-new').value.trim();
   const subGroup = document.getElementById('otf-item-subgroup').value;
   const rate = parseFloat(document.getElementById('otf-item-rate').value) || 0;
 
   if (!sku || !name) {
     alert('SKU and Name are required');
+    return;
+  }
+
+  if (category === '__new__' && !newCategoryName) {
+    alert('Please enter a name for the new category');
     return;
   }
 
@@ -2217,30 +2318,46 @@ function saveOnTheFlyItem() {
     return;
   }
 
-  // Create the new item
-  const newItem = {
-    id: sku,
-    sku,
-    name,
-    uom,
-    category,
-    subGroup,
-    rate,
-    reorder: 0,
-    tracking: '-',
-    status: 'active'
-  };
+  try {
+    let categoryObj = null;
 
-  AppData.items.push(newItem);
+    if (category === '__new__' && newCategoryName) {
+      categoryObj = await API.lookups.createItemCategory(newCategoryName);
+      AppData.itemCategories.push(newCategoryName);
+      category = newCategoryName;
+    } else {
+      categoryObj = AppData.itemCategories.includes(category) ?
+        (await API.lookups.getItemCategories()).find(c => c.name === category) : null;
+    }
 
-  // Close the secondary modal
-  closeOnTheFlyItemModal();
+    const itemData = {
+      id: sku,
+      sku,
+      name,
+      uom,
+      category_id: categoryObj?.id || null,
+      subgroup_id: subGroup || null,
+      rate,
+      reorder_level: 0,
+      tracking: '-',
+      status: 'active'
+    };
 
-  // Add a new line with this item selected
-  addPOLine(sku, 1, rate);
+    await API.items.create(itemData);
+    await refreshItems();
 
-  // Refresh all item dropdowns in existing PO lines
-  refreshPOItemDropdowns();
+    // Close the secondary modal
+    closeOnTheFlyItemModal();
+
+    // Add a new line with this item selected
+    addPOLine(sku, 1, rate);
+
+    // Refresh all item dropdowns in existing PO lines
+    refreshPOItemDropdowns();
+  } catch (error) {
+    console.error('Error creating item:', error);
+    alert('Failed to create item. Please try again.');
+  }
 }
 
 function refreshPOItemDropdowns() {
@@ -2383,10 +2500,36 @@ function updatePOGrandTotal() {
   if (grandTotalEl) grandTotalEl.textContent = `₹${formatCurrency(grandTotal)}`;
 }
 
-function savePO(action = 'save') {
+function toggleNewDepartmentInput() {
+  const select = document.getElementById('po-department');
+  const newInput = document.getElementById('po-department-new');
+  if (select.value === '__new__') {
+    newInput.classList.remove('hidden');
+    newInput.focus();
+  } else {
+    newInput.classList.add('hidden');
+    newInput.value = '';
+  }
+}
+
+function toggleNewSectionInput() {
+  const select = document.getElementById('po-section');
+  const newInput = document.getElementById('po-section-new');
+  if (select.value === '__new__') {
+    newInput.classList.remove('hidden');
+    newInput.focus();
+  } else {
+    newInput.classList.add('hidden');
+    newInput.value = '';
+  }
+}
+
+async function savePO(action = 'save') {
   const vendorId = document.getElementById('po-vendor').value;
-  const department = document.getElementById('po-department').value;
-  const section = document.getElementById('po-section').value;
+  let department = document.getElementById('po-department').value;
+  const newDepartmentName = document.getElementById('po-department-new').value.trim();
+  let section = document.getElementById('po-section').value;
+  const newSectionName = document.getElementById('po-section-new').value.trim();
   const date = document.getElementById('po-date').value;
   const remarks = document.getElementById('po-remarks').value;
   const terms = document.getElementById('po-terms').value;
@@ -2396,15 +2539,23 @@ function savePO(action = 'save') {
     return;
   }
 
-  if (!department || !section) {
-    alert('Please select department and section');
+  if ((!department || department === '__new__') && !newDepartmentName) {
+    alert('Please select or enter a department');
+    return;
+  }
+
+  if ((!section || section === '__new__') && !newSectionName) {
+    alert('Please select or enter a section');
     return;
   }
 
   const vendor = AppData.vendors.find(v => v.id === vendorId);
 
   const items = [];
-  let total = 0;
+  let totalTaxable = 0;
+  let totalCGST = 0;
+  let totalSGST = 0;
+  let totalIGST = 0;
 
   document.querySelectorAll('#po-lines tr').forEach(row => {
     const itemSelect = row.querySelector('.po-item');
@@ -2428,20 +2579,27 @@ function savePO(action = 'save') {
       const lineTotal = taxableAmount + cgstAmount + sgstAmount + igstAmount;
 
       items.push({
-        itemId,
-        name: itemName,
+        item_id: itemId,
+        description: itemName,
         uom,
         qty,
         rate,
-        disc,
-        taxableAmount,
-        cgst,
-        sgst,
-        igst,
-        total: lineTotal,
-        received: 0
+        discount_pct: disc,
+        taxable_amount: taxableAmount,
+        cgst_pct: cgst,
+        sgst_pct: sgst,
+        igst_pct: igst,
+        cgst_amount: cgstAmount,
+        sgst_amount: sgstAmount,
+        igst_amount: igstAmount,
+        total_amount: lineTotal,
+        received_qty: 0
       });
-      total += lineTotal;
+
+      totalTaxable += taxableAmount;
+      totalCGST += cgstAmount;
+      totalSGST += sgstAmount;
+      totalIGST += igstAmount;
     }
   });
 
@@ -2450,23 +2608,54 @@ function savePO(action = 'save') {
     return;
   }
 
-  const newPO = {
-    id: generateId('PO'),
-    vendorId,
-    vendorName: vendor.name,
-    department,
-    section,
-    date,
-    remarks,
-    terms,
-    status: action === 'draft' ? 'Draft' : 'Open',
-    items,
-    total
-  };
+  try {
+    let deptObj = null;
+    if (department === '__new__' && newDepartmentName) {
+      deptObj = await API.lookups.createDepartment(newDepartmentName);
+      AppData.departments.push(deptObj);
+      department = newDepartmentName;
+    } else {
+      deptObj = AppData.departments.find(d => d.name === department);
+    }
 
-  AppData.purchaseOrders.unshift(newPO);
-  closeModal();
-  renderPage('purchase-orders');
+    let secObj = null;
+    if (section === '__new__' && newSectionName) {
+      secObj = await API.lookups.createSection(newSectionName);
+      AppData.sections.push(secObj);
+      section = newSectionName;
+    } else {
+      secObj = AppData.sections.find(s => s.name === section);
+    }
+
+    const nextNum = await API.purchaseOrders.getNextNumber();
+
+    const poData = {
+      id: nextNum.next_number,
+      vendor_id: vendorId,
+      department_id: deptObj?.id || null,
+      section_id: secObj?.id || null,
+      po_date: date,
+      remarks,
+      terms_conditions: terms,
+      status: action === 'draft' ? 'Draft' : 'Open',
+      total_taxable: totalTaxable,
+      total_cgst: totalCGST,
+      total_sgst: totalSGST,
+      total_igst: totalIGST,
+      total_amount: totalTaxable + totalCGST + totalSGST + totalIGST,
+      created_by: 'Admin',
+      approved_by: action === 'save' ? 'Admin' : null,
+      items
+    };
+
+    await API.purchaseOrders.create(poData);
+    await refreshPurchaseOrders();
+    closeModal();
+    renderPage('purchase-orders');
+  } catch (error) {
+    console.error('Error saving PO:', error);
+    alert('Failed to save Purchase Order. Please try again.');
+  }
 }
 
 function editPO(poId) {
@@ -2475,19 +2664,22 @@ function editPO(poId) {
     alert('Only draft POs can be edited');
     return;
   }
-  // For now, show a message - full edit would require loading PO data into the modal
   alert('Edit functionality for PO ' + poId + ' - This would open the PO form with existing data for editing.');
 }
 
-function approvePO(poId) {
+async function approvePO(poId) {
   const po = AppData.purchaseOrders.find(p => p.id === poId);
   if (!po) return;
 
   if (confirm(`Approve PO ${poId}?`)) {
-    po.status = 'Open';
-    po.approvedBy = 'Admin';
-    po.approvedDate = new Date().toISOString().split('T')[0];
-    renderPage('purchase-orders');
+    try {
+      await API.purchaseOrders.approve(poId, 'Admin');
+      await refreshPurchaseOrders();
+      renderPage('purchase-orders');
+    } catch (error) {
+      console.error('Error approving PO:', error);
+      alert('Failed to approve Purchase Order. Please try again.');
+    }
   }
 }
 
@@ -3394,7 +3586,7 @@ function updateGRNLineFromItem(select) {
   }
 }
 
-function saveGRN(action = 'save') {
+async function saveGRN(action = 'save') {
   const vendorId = document.getElementById('grn-vendor').value;
   const poId = document.getElementById('grn-po').value;
   const department = document.getElementById('grn-department').value;
@@ -3420,12 +3612,15 @@ function saveGRN(action = 'save') {
 
   const vendor = AppData.vendors.find(v => v.id === vendorId);
   const grnItems = [];
-  let total = 0;
+  let totalTaxable = 0;
+  let totalCGST = 0;
+  let totalSGST = 0;
+  let totalIGST = 0;
 
   document.querySelectorAll('#grn-lines tr').forEach(row => {
     const itemId = row.dataset.itemId;
     const poSelect = row.querySelector('.grn-po-select');
-    const poId = poSelect ? poSelect.value : row.querySelector('.badge')?.textContent;
+    const linePoId = poSelect ? poSelect.value : row.querySelector('.badge')?.textContent;
 
     const qty = parseInt(row.querySelector('.grn-qty').value) || 0;
     const rate = parseFloat(row.querySelector('.grn-rate').value) || 0;
@@ -3438,52 +3633,41 @@ function saveGRN(action = 'save') {
     const grossAmount = qty * rate;
     const discountAmount = grossAmount * (disc / 100);
     const taxableAmount = grossAmount - discountAmount;
-    const lineTotal = taxableAmount * (1 + (cgst + sgst + igst) / 100);
+    const cgstAmount = taxableAmount * (cgst / 100);
+    const sgstAmount = taxableAmount * (sgst / 100);
+    const igstAmount = taxableAmount * (igst / 100);
+    const lineTotal = taxableAmount + cgstAmount + sgstAmount + igstAmount;
 
     const poOptions = window.grnItemsByItemId[itemId] || [];
-    const itemData = poOptions.find(p => p.poId === poId) || poOptions[0];
+    const itemData = poOptions.find(p => p.poId === linePoId) || poOptions[0];
 
     if (qty > 0) {
       grnItems.push({
-        itemId,
-        poId,
-        name: itemData.name,
-        uom: itemData.uom,
+        po_id: linePoId,
+        item_id: itemId,
+        description: itemData?.name || '',
+        uom: itemData?.uom || 'NOS',
         qty,
+        accepted_qty: qty,
+        rejected_qty: 0,
+        damaged_qty: 0,
         rate,
-        disc,
-        taxableAmount,
-        cgst,
-        sgst,
-        igst,
-        total: lineTotal,
-        rack,
-        ordered: itemData.qty,
-        previouslyReceived: itemData.received
+        discount_pct: disc,
+        taxable_amount: taxableAmount,
+        cgst_pct: cgst,
+        sgst_pct: sgst,
+        igst_pct: igst,
+        cgst_amount: cgstAmount,
+        sgst_amount: sgstAmount,
+        igst_amount: igstAmount,
+        total_amount: lineTotal,
+        rack_bin: rack
       });
-      total += lineTotal;
 
-      // Update PO item received quantity (only if saving, not draft)
-      if (action === 'save') {
-        const po = AppData.purchaseOrders.find(p => p.id === poId);
-        if (po) {
-          const poItem = po.items.find(i => i.itemId === itemId);
-          if (poItem) {
-            poItem.received += qty;
-
-            // Update PO status
-            const allReceived = po.items.every(i => i.received >= i.qty);
-            if (allReceived) {
-              po.status = 'Completed';
-            } else if (po.items.some(i => i.received > 0)) {
-              po.status = 'Partially Received';
-            }
-
-            // Update stock
-            updateStock(itemId, itemData.name, po.siteId, po.siteName, qty);
-          }
-        }
-      }
+      totalTaxable += taxableAmount;
+      totalCGST += cgstAmount;
+      totalSGST += sgstAmount;
+      totalIGST += igstAmount;
     }
   });
 
@@ -3492,24 +3676,43 @@ function saveGRN(action = 'save') {
     return;
   }
 
-  // Create GRN
-  const newGRN = {
-    id: generateId('GRN'),
-    vendorId,
-    vendorName: vendor.name,
-    department,
-    section,
-    godown,
-    challanNo,
-    date,
-    status: action === 'draft' ? 'Draft' : 'Posted',
-    items: grnItems,
-    total
-  };
+  try {
+    const deptObj = AppData.departments.find(d => d.name === department);
+    const secObj = AppData.sections.find(s => s.name === section);
+    const godownObj = AppData.godowns.find(g => g.name === godown);
 
-  AppData.goodsReceipts.unshift(newGRN);
-  closeModal();
-  renderPage('goods-receipt');
+    const nextNum = await API.goodsReceipts.getNextNumber();
+
+    const grnData = {
+      id: nextNum.next_number,
+      vendor_id: vendorId,
+      department_id: deptObj?.id || null,
+      section_id: secObj?.id || null,
+      godown_id: godownObj?.id || null,
+      challan_no: challanNo,
+      grn_date: date,
+      status: action === 'draft' ? 'Draft' : 'Posted',
+      total_taxable: totalTaxable,
+      total_cgst: totalCGST,
+      total_sgst: totalSGST,
+      total_igst: totalIGST,
+      total_amount: totalTaxable + totalCGST + totalSGST + totalIGST,
+      created_by: 'Admin',
+      items: grnItems
+    };
+
+    await API.goodsReceipts.create(grnData);
+    await Promise.all([
+      refreshGoodsReceipts(),
+      refreshPurchaseOrders(),
+      refreshStock()
+    ]);
+    closeModal();
+    renderPage('goods-receipt');
+  } catch (error) {
+    console.error('Error saving GRN:', error);
+    alert('Failed to save Goods Receipt. Please try again.');
+  }
 }
 
 function updateStock(itemId, itemName, siteId, siteName, qty) {
@@ -3546,6 +3749,9 @@ function viewGRN(grnId) {
   const grn = AppData.goodsReceipts.find(g => g.id === grnId);
   if (!grn) return;
 
+  const poIds = [...new Set(grn.items.map(item => item.poId).filter(Boolean))];
+  const poDisplay = poIds.length > 0 ? poIds.join(', ') : '-';
+
   modalContent.innerHTML = `
     <div class="modal-header">
       <h2>Goods Receipt: ${grn.id}</h2>
@@ -3555,7 +3761,7 @@ function viewGRN(grnId) {
       <div class="form-grid">
         <div class="form-group">
           <label>PO Number</label>
-          <p><strong>${grn.poId}</strong></p>
+          <p><strong>${poDisplay}</strong></p>
         </div>
         <div class="form-group">
           <label>Vendor</label>
@@ -3563,7 +3769,7 @@ function viewGRN(grnId) {
         </div>
         <div class="form-group">
           <label>Site</label>
-          <p><strong>${grn.siteName}</strong></p>
+          <p><strong>${grn.siteName || '-'}</strong></p>
         </div>
         <div class="form-group">
           <label>Challan No.</label>
@@ -3577,6 +3783,14 @@ function viewGRN(grnId) {
           <label>Status</label>
           <p><span class="badge ${getStatusBadgeClass(grn.status)}">${grn.status}</span></p>
         </div>
+        <div class="form-group">
+          <label>Department</label>
+          <p>${grn.department || '-'}</p>
+        </div>
+        <div class="form-group">
+          <label>Godown</label>
+          <p>${grn.godown || '-'}</p>
+        </div>
       </div>
 
       <h4 style="margin: 20px 0 12px;">Received Items</h4>
@@ -3584,24 +3798,28 @@ function viewGRN(grnId) {
         <thead>
           <tr>
             <th>Item</th>
-            <th>Ordered</th>
-            <th>Prev. Received</th>
-            <th>This Receipt</th>
-            <th>Balance</th>
+            <th>UOM</th>
+            <th>Qty Received</th>
+            <th>Rate</th>
+            <th>Total</th>
           </tr>
         </thead>
         <tbody>
           ${grn.items.map(item => `
             <tr>
               <td>${item.name}</td>
-              <td>${item.ordered}</td>
-              <td>${item.previouslyReceived}</td>
-              <td><strong>${item.received}</strong></td>
-              <td>${item.balance}</td>
+              <td>${item.uom}</td>
+              <td><strong>${item.qty}</strong></td>
+              <td>₹${formatCurrency(item.rate)}</td>
+              <td>₹${formatCurrency(item.total)}</td>
             </tr>
           `).join('')}
         </tbody>
       </table>
+
+      <div class="totals-section" style="margin-top: 16px; text-align: right;">
+        <p><strong>Total Amount: ₹${formatCurrency(grn.total)}</strong></p>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Close</button>
@@ -4100,7 +4318,7 @@ function updateSCGrandTotal() {
   }
 }
 
-function saveSC(action = 'save') {
+async function saveSC(action = 'save') {
   const costCenterSelect = document.getElementById('sc-cost-center');
   const costCenter = costCenterSelect.options[costCenterSelect.selectedIndex]?.text || '';
   const costCenterId = costCenterSelect.value;
@@ -4137,7 +4355,16 @@ function saveSC(action = 'save') {
       const rack = row.querySelector('.sc-rack').value;
       const remarks = row.querySelector('.sc-remarks').value;
 
-      items.push({ itemId, name: itemName, uom, qty, rate, amount, rack, remarks });
+      items.push({
+        item_id: itemId,
+        description: itemName,
+        uom,
+        qty,
+        rate,
+        amount,
+        rack_bin: rack,
+        remarks
+      });
       total += amount;
     }
   });
@@ -4147,31 +4374,41 @@ function saveSC(action = 'save') {
     return;
   }
 
-  const newSC = {
-    id: document.getElementById('sc-number').value,
-    costCenter,
-    costCenterId,
-    date,
-    kmr,
-    hmr,
-    jobCardNo,
-    department,
-    section,
-    godown,
-    status: action === 'draft' ? 'Draft' : 'Posted',
-    createdBy: 'Admin',
-    approvedBy: action === 'draft' ? '' : 'Manager',
-    items,
-    total
-  };
+  try {
+    const deptObj = AppData.departments.find(d => d.name === department);
+    const secObj = AppData.sections.find(s => s.name === section);
+    const godownObj = AppData.godowns.find(g => g.name === godown);
 
-  if (!AppData.stockConsumptions) {
-    AppData.stockConsumptions = [];
+    const nextNum = await API.stock.getNextSCNumber();
+
+    const scData = {
+      id: nextNum.next_number,
+      cost_center_id: costCenterId,
+      department_id: deptObj?.id || null,
+      section_id: secObj?.id || null,
+      godown_id: godownObj?.id || null,
+      sc_date: date,
+      kmr,
+      hmr,
+      job_card_no: jobCardNo,
+      status: action === 'draft' ? 'Draft' : 'Posted',
+      total_amount: total,
+      created_by: 'Admin',
+      approved_by: action === 'draft' ? null : 'Manager',
+      items
+    };
+
+    await API.stock.createConsumption(scData);
+    await Promise.all([
+      refreshStockConsumptions(),
+      refreshStock()
+    ]);
+    closeModal();
+    renderPage('stock');
+  } catch (error) {
+    console.error('Error saving stock consumption:', error);
+    alert('Failed to save Stock Consumption. Please try again.');
   }
-  AppData.stockConsumptions.unshift(newSC);
-
-  closeModal();
-  renderPage('stock');
 }
 
 function viewSC(scId) {
