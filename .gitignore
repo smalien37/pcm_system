@@ -1,0 +1,6 @@
+schema.sql
+add_users_table.sql
+venv
+.env
+__pycache__/
+.DS_Store
