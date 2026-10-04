@@ -107,12 +107,12 @@ const API = {
             const query = new URLSearchParams(params).toString();
             return API.get(`/vendors${query ? '?' + query : ''}`);
         },
-        getById: (id) => API.get(`/vendors/${id}`),
+        getById: (id) => API.get(`/vendors/${encodeURIComponent(id)}`),
         create: (data) => API.post('/vendors', data),
-        update: (id, data) => API.put(`/vendors/${id}`, data),
-        delete: (id) => API.delete(`/vendors/${id}`),
-        getItems: (id) => API.get(`/vendors/${id}/items`),
-        getOpenPOs: (id) => API.get(`/vendors/${id}/open-pos`),
+        update: (id, data) => API.put(`/vendors/${encodeURIComponent(id)}`, data),
+        delete: (id) => API.delete(`/vendors/${encodeURIComponent(id)}`),
+        getItems: (id) => API.get(`/vendors/${encodeURIComponent(id)}/items`),
+        getOpenPOs: (id) => API.get(`/vendors/${encodeURIComponent(id)}/open-pos`),
     },
 
     items: {
@@ -120,10 +120,10 @@ const API = {
             const query = new URLSearchParams(params).toString();
             return API.get(`/items${query ? '?' + query : ''}`);
         },
-        getById: (id) => API.get(`/items/${id}`),
+        getById: (id) => API.get(`/items/${encodeURIComponent(id)}`),
         create: (data) => API.post('/items', data),
-        update: (id, data) => API.put(`/items/${id}`, data),
-        delete: (id) => API.delete(`/items/${id}`),
+        update: (id, data) => API.put(`/items/${encodeURIComponent(id)}`, data),
+        delete: (id) => API.delete(`/items/${encodeURIComponent(id)}`),
     },
 
     purchaseOrders: {
