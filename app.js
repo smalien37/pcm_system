@@ -1128,6 +1128,7 @@ function openVendorModal(vendorId = null) {
           <div class="form-group">
             <label>Primary Category</label>
             <select id="vendor-category" onchange="toggleNewVendorCategoryInput()">
+              <option value="">Select Category...</option>
               ${AppData.vendorCategories.map(cat =>
                 `<option value="${cat}" ${vendor?.category === cat ? 'selected' : ''}>${cat}</option>`
               ).join('')}
@@ -1454,6 +1455,7 @@ function openItemModal(itemId = null) {
           <div class="form-group">
             <label>Category</label>
             <select id="item-category" onchange="toggleNewCategoryInput()">
+              <option value="">Select Category...</option>
               ${AppData.itemCategories.map(cat =>
                 `<option value="${cat}" ${item?.category === cat ? 'selected' : ''}>${cat}</option>`
               ).join('')}
@@ -2246,6 +2248,7 @@ function openOnTheFlyItemModal() {
             <div class="form-group">
               <label>Category</label>
               <select id="otf-item-category" onchange="toggleOtfNewCategoryInput()">
+                <option value="">Select Category...</option>
                 ${AppData.itemCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
                 <option value="__new__">+ Add New Category...</option>
               </select>
