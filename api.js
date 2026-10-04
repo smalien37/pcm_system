@@ -2,7 +2,7 @@
 // API Client & Data Management
 // =====================================================
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = '/api';
 
 // Global App Data Store
 let AppData = {
