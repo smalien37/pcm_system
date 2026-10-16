@@ -390,6 +390,35 @@ CREATE TABLE stock (
 );
 
 -- =====================================================
+-- ISSUES TABLE (for bug reports and feedback)
+-- =====================================================
+
+CREATE TABLE issues (
+    id SERIAL PRIMARY KEY,
+    issue_number VARCHAR(20) NOT NULL UNIQUE,
+    type VARCHAR(50) NOT NULL CHECK (type IN ('bug', 'feature', 'performance', 'ui', 'data', 'other')),
+    subject VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    priority VARCHAR(20) NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'critical')),
+    status VARCHAR(50) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed', 'wontfix')),
+    page VARCHAR(100),
+    user_agent TEXT,
+    attachments TEXT DEFAULT '[]',
+    reported_by_id INTEGER REFERENCES users(id),
+    reported_by_name VARCHAR(100),
+    assigned_to_id INTEGER REFERENCES users(id),
+    resolution_notes TEXT,
+    resolved_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_issues_status ON issues(status);
+CREATE INDEX idx_issues_type ON issues(type);
+CREATE INDEX idx_issues_priority ON issues(priority);
+CREATE INDEX idx_issues_reported_by ON issues(reported_by_id);
+
+-- =====================================================
 -- INDEXES FOR PERFORMANCE
 -- =====================================================
 

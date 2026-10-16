@@ -407,6 +407,10 @@ function updateTopBarUserInfo() {
           }).join('')}
         </select>
       </div>
+      <button class="btn-report-issue" onclick="openReportIssueModal()" title="Report an Issue">
+        <span class="material-icons">bug_report</span>
+        <span>Report Issue</span>
+      </button>
       <span class="notification-badge">5</span>
       <div class="user-info" onclick="toggleUserMenu()">
         <span class="user-name">${currentUser.name}</span>
@@ -6262,9 +6266,255 @@ function renderRoles() {
   `;
 }
 
+// ============ REPORT ISSUE MODAL ============
+let reportIssueAttachments = [];
+
+function openReportIssueModal() {
+  reportIssueAttachments = [];
+
+  modalContent.innerHTML = `
+    <div class="modal-header">
+      <h2>Report an Issue</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="report-issue-form">
+        <div class="form-group">
+          <label>Issue Type *</label>
+          <select id="issue-type" required>
+            <option value="">Select issue type...</option>
+            <option value="bug">Bug / Error</option>
+            <option value="feature">Feature Request</option>
+            <option value="performance">Performance Issue</option>
+            <option value="ui">UI/UX Issue</option>
+            <option value="data">Data Issue</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Subject *</label>
+          <input type="text" id="issue-subject" placeholder="Brief summary of the issue" required>
+        </div>
+        <div class="form-group">
+          <label>Description *</label>
+          <textarea id="issue-description" rows="5" placeholder="Please describe the issue in detail. Include steps to reproduce if applicable." required></textarea>
+        </div>
+        <div class="form-group">
+          <label>Priority</label>
+          <select id="issue-priority">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Attachments <span style="font-weight: normal; color: var(--gray-500);">(Screenshots, recordings, or files)</span></label>
+          <div class="attachment-upload-area" id="attachment-upload-area" onclick="document.getElementById('issue-attachments').click()">
+            <input type="file" id="issue-attachments" multiple accept="image/*,video/*,.pdf,.doc,.docx,.txt" style="display: none;" onchange="handleIssueAttachments(this)">
+            <div class="attachment-upload-content">
+              <span class="material-icons">cloud_upload</span>
+              <p>Click to upload or drag and drop</p>
+              <span class="attachment-hint">PNG, JPG, GIF, MP4, PDF up to 10MB each</span>
+            </div>
+          </div>
+          <div class="attachment-preview-list" id="attachment-preview-list"></div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitIssueReport()">
+        <span class="material-icons" style="font-size: 18px;">send</span>
+        Submit Report
+      </button>
+    </div>
+  `;
+
+  setupAttachmentDragDrop();
+  modalOverlay.classList.remove('hidden');
+}
+
+function setupAttachmentDragDrop() {
+  const uploadArea = document.getElementById('attachment-upload-area');
+  if (!uploadArea) return;
+
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    uploadArea.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  });
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    uploadArea.addEventListener(eventName, () => {
+      uploadArea.classList.add('drag-over');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    uploadArea.addEventListener(eventName, () => {
+      uploadArea.classList.remove('drag-over');
+    });
+  });
+
+  uploadArea.addEventListener('drop', (e) => {
+    const files = e.dataTransfer.files;
+    if (files.length) {
+      handleIssueAttachments({ files });
+    }
+  });
+}
+
+function handleIssueAttachments(input) {
+  const files = Array.from(input.files || []);
+  const maxSize = 10 * 1024 * 1024; // 10MB
+
+  files.forEach(file => {
+    if (file.size > maxSize) {
+      alert(`File "${file.name}" exceeds 10MB limit.`);
+      return;
+    }
+
+    const id = 'att_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    reportIssueAttachments.push({ id, file, name: file.name, type: file.type, size: file.size });
+  });
+
+  renderAttachmentPreviews();
+}
+
+function renderAttachmentPreviews() {
+  const previewList = document.getElementById('attachment-preview-list');
+  if (!previewList) return;
+
+  if (reportIssueAttachments.length === 0) {
+    previewList.innerHTML = '';
+    return;
+  }
+
+  previewList.innerHTML = reportIssueAttachments.map(att => {
+    const isImage = att.type.startsWith('image/');
+    const isVideo = att.type.startsWith('video/');
+    const sizeKB = (att.size / 1024).toFixed(1);
+    const sizeDisplay = att.size > 1024 * 1024
+      ? (att.size / (1024 * 1024)).toFixed(1) + ' MB'
+      : sizeKB + ' KB';
+
+    let preview = '';
+    if (isImage) {
+      const url = URL.createObjectURL(att.file);
+      preview = `<img src="${url}" alt="${att.name}" class="attachment-thumb">`;
+    } else if (isVideo) {
+      preview = `<span class="material-icons attachment-icon">videocam</span>`;
+    } else {
+      preview = `<span class="material-icons attachment-icon">description</span>`;
+    }
+
+    return `
+      <div class="attachment-preview-item" data-id="${att.id}">
+        <div class="attachment-preview-thumb">${preview}</div>
+        <div class="attachment-preview-info">
+          <span class="attachment-name">${att.name}</span>
+          <span class="attachment-size">${sizeDisplay}</span>
+        </div>
+        <button type="button" class="attachment-remove" onclick="removeIssueAttachment('${att.id}')" title="Remove">
+          <span class="material-icons">close</span>
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+function removeIssueAttachment(id) {
+  reportIssueAttachments = reportIssueAttachments.filter(att => att.id !== id);
+  renderAttachmentPreviews();
+}
+
+async function submitIssueReport() {
+  const issueType = document.getElementById('issue-type').value;
+  const subject = document.getElementById('issue-subject').value.trim();
+  const description = document.getElementById('issue-description').value.trim();
+  const priority = document.getElementById('issue-priority').value;
+
+  if (!issueType || !subject || !description) {
+    alert('Please fill in all required fields.');
+    return;
+  }
+
+  // Show loading state
+  const submitBtn = document.querySelector('.modal-footer .btn-primary');
+  const originalText = submitBtn.innerHTML;
+  submitBtn.innerHTML = '<span class="material-icons" style="font-size: 18px;">hourglass_empty</span> Uploading...';
+  submitBtn.disabled = true;
+
+  try {
+    // Convert files to base64
+    const attachmentsWithData = await Promise.all(
+      reportIssueAttachments.map(async (att) => {
+        const base64Data = await fileToBase64(att.file);
+        return {
+          name: att.name,
+          type: att.type,
+          size: att.size,
+          data: base64Data
+        };
+      })
+    );
+
+    const issueData = {
+      type: issueType,
+      subject,
+      description,
+      priority,
+      attachments: attachmentsWithData,
+      reported_by_name: currentUser?.name || 'Unknown',
+      page: currentPage,
+      user_agent: navigator.userAgent
+    };
+
+    const result = await API.issues.create(issueData);
+    closeModal();
+    showNotification(`Issue ${result.issue_number} reported successfully! Our team will review it shortly.`, 'success');
+  } catch (error) {
+    console.error('Error submitting issue:', error);
+    showNotification('Failed to submit issue. Please try again.', 'error');
+    submitBtn.innerHTML = originalText;
+    submitBtn.disabled = false;
+  }
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function showNotification(message, type = 'info') {
+  const existing = document.querySelector('.toast-notification');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = `toast-notification toast-${type}`;
+  toast.innerHTML = `
+    <span class="material-icons">${type === 'success' ? 'check_circle' : type === 'error' ? 'error' : 'info'}</span>
+    <span>${message}</span>
+  `;
+  document.body.appendChild(toast);
+
+  setTimeout(() => toast.classList.add('show'), 10);
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
 // ============ MODAL HELPERS ============
 function closeModal() {
   modalOverlay.classList.add('hidden');
   modalContent.classList.remove('modal-wide');
   modalContent.innerHTML = '';
+  reportIssueAttachments = [];
 }

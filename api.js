@@ -179,6 +179,18 @@ const API = {
         deleteConsumption: (id) => API.delete(`/stock/consumption/${id}`),
     },
 
+    issues: {
+        getAll: (params = {}) => {
+            const query = new URLSearchParams(params).toString();
+            return API.get(`/issues${query ? '?' + query : ''}`);
+        },
+        getById: (id) => API.get(`/issues/${id}`),
+        getSummary: () => API.get('/issues/summary'),
+        create: (data) => API.post('/issues', data),
+        update: (id, data) => API.patch(`/issues/${id}`, data),
+        delete: (id) => API.delete(`/issues/${id}`),
+    },
+
     async loadInitialData() {
         try {
             const [
