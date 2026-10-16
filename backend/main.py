@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
 
-from .routers import lookups, vendors, items, purchase_orders, goods_receipts, stock, auth
+from .routers import lookups, vendors, items, purchase_orders, goods_receipts, stock, auth, issues
 
 app = FastAPI(
     title="PCM System API",
@@ -27,6 +27,7 @@ app.include_router(items.router)
 app.include_router(purchase_orders.router)
 app.include_router(goods_receipts.router)
 app.include_router(stock.router)
+app.include_router(issues.router)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

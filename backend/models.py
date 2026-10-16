@@ -464,3 +464,28 @@ class Stock(Base):
     item = relationship("Item")
     site = relationship("Site")
     godown = relationship("Godown")
+
+
+class Issue(Base):
+    __tablename__ = "issues"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    issue_number = Column(String(20), nullable=False, unique=True)
+    type = Column(String(50), nullable=False)
+    subject = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    priority = Column(String(20), nullable=False, default="medium")
+    status = Column(String(50), nullable=False, default="open")
+    page = Column(String(100))
+    user_agent = Column(Text)
+    attachments = Column(Text)  # JSON string
+    reported_by_id = Column(Integer, ForeignKey("users.id"))
+    reported_by_name = Column(String(100))
+    assigned_to_id = Column(Integer, ForeignKey("users.id"))
+    resolution_notes = Column(Text)
+    resolved_at = Column(DateTime)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    reported_by = relationship("User", foreign_keys=[reported_by_id])
+    assigned_to = relationship("User", foreign_keys=[assigned_to_id])

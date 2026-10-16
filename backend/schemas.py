@@ -400,3 +400,44 @@ class StockResponse(StockBase):
     godown: Optional[GodownResponse] = None
     class Config:
         from_attributes = True
+
+
+# Issue Schemas
+class IssueAttachment(BaseModel):
+    name: str
+    type: str
+    size: int
+    data: Optional[str] = None  # Base64 encoded file data
+
+class IssueBase(BaseModel):
+    type: str
+    subject: str
+    description: str
+    priority: Optional[str] = "medium"
+    page: Optional[str] = None
+    user_agent: Optional[str] = None
+
+class IssueCreate(IssueBase):
+    attachments: Optional[List[IssueAttachment]] = []
+    reported_by_name: Optional[str] = None
+
+class IssueUpdate(BaseModel):
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    assigned_to_id: Optional[int] = None
+    resolution_notes: Optional[str] = None
+
+class IssueResponse(IssueBase):
+    id: int
+    issue_number: str
+    status: str
+    attachments: Optional[str] = None
+    reported_by_id: Optional[int] = None
+    reported_by_name: Optional[str] = None
+    assigned_to_id: Optional[int] = None
+    resolution_notes: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    class Config:
+        from_attributes = True
